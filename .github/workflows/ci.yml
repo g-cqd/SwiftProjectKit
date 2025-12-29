@@ -219,6 +219,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Ensure Linting Tools
+        run: |
+          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
+
+      - name: Cache SPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build Universal Binary
+        run: |
+          # Build for ARM64
+          swift build -c release --arch arm64
+          cp .build/arm64-apple-macosx/release/spk .build/spk-arm64
+
+          # Build for x86_64
+          swift build -c release --arch x86_64
+          cp .build/x86_64-apple-macosx/release/spk .build/spk-x86_64
+
+          # Create universal binary
+          mkdir -p .build/release
+          lipo -create -output .build/release/spk \
+            .build/spk-arm64 \
+            .build/spk-x86_64
+
+          lipo -info .build/release/spk
+
+      - name: Package Binaries
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          mkdir -p release
+
+          for ARCH in universal arm64 x86_64; do
+            if [[ "$ARCH" == "universal" ]]; then
+              cp .build/release/spk release/spk
+            else
+              cp .build/spk-$ARCH release/spk
+            fi
+            tar -C release -czvf "release/spk-${VERSION}-macos-${ARCH}.tar.gz" spk
+          done
+
+          cd release && shasum -a 256 *.tar.gz > checksums.txt
+
       - name: Create Tag
         # Create tag on workflow_dispatch (if requested) or push to main (not when already triggered by a tag)
         if: |
@@ -232,8 +283,9 @@ jobs:
 
       - name: Prepare Release Notes
         run: |
-          cat > release_notes.md << 'RELEASE_EOF'
-          # SwiftProjectKit v${{ needs.validate-release.outputs.version }}
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          cat > release_notes.md << RELEASE_EOF
+          # SwiftProjectKit v${VERSION}
 
           ${{ needs.changelog.outputs.changelog }}
 
@@ -243,11 +295,25 @@ jobs:
 
           ### Swift Package Manager
 
-          ```swift
+          \`\`\`swift
           dependencies: [
-              .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "${{ needs.validate-release.outputs.version }}")
+              .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "${VERSION}")
           ]
-          ```
+          \`\`\`
+
+          ### Pre-built Binary (macOS)
+
+          \`\`\`bash
+          # Universal (Apple Silicon + Intel)
+          curl -L https://github.com/g-cqd/SwiftProjectKit/releases/download/v${VERSION}/spk-${VERSION}-macos-universal.tar.gz | tar xz
+          sudo mv spk /usr/local/bin/
+          \`\`\`
+
+          ### Checksums
+
+          \`\`\`
+          $(cat release/checksums.txt)
+          \`\`\`
 
           RELEASE_EOF
 
@@ -259,5 +325,8 @@ jobs:
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(needs.validate-release.outputs.version, 'alpha') || contains(needs.validate-release.outputs.version, 'beta') || contains(needs.validate-release.outputs.version, 'rc') }}
+          files: |
+            release/spk-${{ needs.validate-release.outputs.version }}-macos-*.tar.gz
+            release/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
