@@ -50,6 +50,8 @@ struct InitCommand: AsyncParsableCommand {
         print("  swift test")
     }
 
+    // MARK: Private
+
     private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
@@ -159,8 +161,6 @@ struct InitCommand: AsyncParsableCommand {
         }
         """
     }
-
-    // MARK: Private
 
     // MARK: - Generators
 

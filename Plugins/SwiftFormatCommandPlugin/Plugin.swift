@@ -55,6 +55,10 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         )
     }
 
+    // MARK: Private
+
+    private let defaultVersion = "0.54.6"
+
     private func buildFormatArguments(
         lint: Bool,
         verbose: Bool,
@@ -118,10 +122,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         print("SwiftFormat \(action) successfully")
     }
 
-    // MARK: Private
-
-    private let defaultVersion = "0.54.6"
-
     // MARK: - Private Helpers
 
     private func findConfigFile(in directory: URL) -> URL? {
@@ -144,7 +144,7 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         }
 
         guard let downloadURL = URL(
-            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
         ) else {
             throw CommandError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
         }
@@ -302,7 +302,7 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
 
         private func downloadSwiftFormatSync(to binaryDir: URL, version: String) throws {
             guard let downloadURL = URL(
-                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
             ) else {
                 throw CommandError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
             }

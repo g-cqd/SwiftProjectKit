@@ -54,6 +54,10 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         )
     }
 
+    // MARK: Private
+
+    private let defaultVersion = "0.57.1"
+
     private func buildLintArguments(
         fix: Bool,
         strict: Bool,
@@ -114,10 +118,6 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         print("SwiftLint completed successfully")
     }
 
-    // MARK: Private
-
-    private let defaultVersion = "0.57.1"
-
     // MARK: - Private Helpers
 
     private func findConfigFile(in directory: URL) -> URL? {
@@ -143,7 +143,7 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         }
 
         guard let downloadURL = URL(
-            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
         ) else {
             throw CommandError.downloadFailed(tool: "SwiftLint", statusCode: 0)
         }
@@ -300,7 +300,7 @@ struct SwiftLintCommandPlugin: CommandPlugin {
 
         private func downloadSwiftLintSync(to binaryDir: URL, version: String) throws {
             guard let downloadURL = URL(
-                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
             ) else {
                 throw CommandError.downloadFailed(tool: "SwiftLint", statusCode: 0)
             }

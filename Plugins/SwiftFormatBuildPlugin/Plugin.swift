@@ -96,7 +96,7 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
 
         // Download from GitHub releases
         guard let downloadURL = URL(
-            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
         ) else {
             throw PluginError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
         }
@@ -209,7 +209,7 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
 
         private func downloadSwiftFormatSync(to binaryDir: URL, version: String) throws {
             guard let downloadURL = URL(
-                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
             ) else {
                 throw PluginError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
             }

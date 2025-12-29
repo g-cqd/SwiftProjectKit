@@ -3,6 +3,8 @@ import Foundation
 import SwiftProjectKitCore
 
 struct UpdateCommand: AsyncParsableCommand {
+    // MARK: Internal
+
     static let configuration = CommandConfiguration(
         commandName: "update",
         abstract: "Update project configuration files to latest standards",
@@ -63,6 +65,8 @@ struct UpdateCommand: AsyncParsableCommand {
 
         print("\nUpdate complete\(dryRun ? " (dry run)" : "")!")
     }
+
+    // MARK: Private
 
     private func updateSwiftLintConfig(at projectURL: URL) throws {
         let configPath = projectURL.appendingPathComponent(".swiftlint.yml")

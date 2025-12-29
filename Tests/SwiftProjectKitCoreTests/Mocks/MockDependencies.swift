@@ -125,7 +125,7 @@ actor MockNetworkSession: NetworkSession {
                   url: mockURL,
                   statusCode: httpStatusCode,
                   httpVersion: nil,
-                  headerFields: nil
+                  headerFields: nil,
               )
         else {
             fatalError("Test configuration error: Failed to create mock URL or HTTPURLResponse")

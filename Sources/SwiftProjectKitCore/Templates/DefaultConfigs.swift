@@ -1,5 +1,7 @@
 import Foundation
 
+// MARK: - DefaultConfigs
+
 /// Default configuration templates for SwiftProjectKit
 public enum DefaultConfigs {}
 

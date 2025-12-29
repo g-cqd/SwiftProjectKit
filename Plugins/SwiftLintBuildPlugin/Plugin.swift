@@ -96,7 +96,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
 
         // Download from GitHub releases
         guard let downloadURL = URL(
-            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
         ) else {
             throw PluginError.downloadFailed(tool: "SwiftLint", statusCode: 0)
         }
@@ -211,7 +211,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
 
         private func downloadSwiftLintSync(to binaryDir: URL, version: String) throws {
             guard let downloadURL = URL(
-                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
             ) else {
                 throw PluginError.downloadFailed(tool: "SwiftLint", statusCode: 0)
             }
