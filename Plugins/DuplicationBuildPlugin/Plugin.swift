@@ -1,14 +1,14 @@
 import Foundation
 import PackagePlugin
 
-// MARK: - StaticAnalysisBuildPlugin
+// MARK: - DuplicationBuildPlugin
 
-/// Build tool plugin that runs static analysis (unused code detection) on every build.
+/// Build tool plugin that runs duplication detection on every build.
 ///
 /// This plugin downloads SwiftStaticAnalysis (`swa`) from GitHub releases and caches it
-/// in the plugin work directory. It runs as a pre-build command.
+/// in the plugin work directory. It runs as a pre-build command with `swa duplicates`.
 @main
-struct StaticAnalysisBuildPlugin: BuildToolPlugin {
+struct DuplicationBuildPlugin: BuildToolPlugin {
     // MARK: Internal
 
     func createBuildCommands(
@@ -40,14 +40,11 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
             return []
         }
 
-        // Build arguments for unused code detection
-        // --format xcode: Output in Xcode-compatible format
-        // --sensible-defaults: Use sensible defaults for ignoring common patterns
+        // Build arguments for duplication detection
         var arguments = [
-            "unused",
+            "duplicates",
             sourceTarget.directoryURL.path,
             "--format", "xcode",
-            "--sensible-defaults",
         ]
 
         // Check for config file
@@ -56,11 +53,11 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
         }
 
         // Create output directory
-        let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("swa-output")
+        let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("duplicates-output")
 
         return [
             .prebuildCommand(
-                displayName: "StaticAnalysis \(target.name)",
+                displayName: "Duplication \(target.name)",
                 executable: swaPath,
                 arguments: arguments,
                 outputFilesDirectory: outputDir,
@@ -70,10 +67,7 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
 
     // MARK: Private
 
-    /// Default SwiftStaticAnalysis version to use
     private let defaultVersion = "0.1.0"
-
-    // MARK: - Private Helpers
 
     // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
@@ -118,7 +112,7 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
         // Create directory
         try FileManager.default.createDirectory(at: binaryDir, withIntermediateDirectories: true)
 
-        // Extract tar.gz (different from SwiftLint's zip)
+        // Extract tar.gz
         let tarProcess = Process()
         tarProcess.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
         tarProcess.arguments = ["xzf", localURL.path, "-C", binaryDir.path]
@@ -156,8 +150,7 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
 #if canImport(XcodeProjectPlugin)
     import XcodeProjectPlugin
 
-    extension StaticAnalysisBuildPlugin: XcodeBuildToolPlugin {
-        // swiftlint:disable:next function_body_length
+    extension DuplicationBuildPlugin: XcodeBuildToolPlugin {
         func createBuildCommands(
             context: XcodePluginContext,
             target: XcodeTarget,
@@ -171,18 +164,18 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
                 return []
             }
 
-            // First, check if swa is available in PATH (system-installed)
+            // Check for system-installed swa
             if let systemPath = findInPath("swa") {
                 Diagnostics.remark("Using system-installed swa at \(systemPath.path)")
-                return createSWACommand(
+                return createDuplicatesCommand(
                     binary: systemPath,
                     targetDirectory: context.xcodeProject.directoryURL,
-                    outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("swa-output"),
+                    outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("duplicates-output"),
                     targetName: target.displayName,
                 )
             }
 
-            // Check for cached binary (can't use async in Xcode plugin context)
+            // Check for cached binary
             let binaryDir = context.pluginWorkDirectoryURL
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swa")
@@ -199,30 +192,34 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
                 }
             }
 
-            return createSWACommand(
+            return createDuplicatesCommand(
                 binary: binaryPath,
                 targetDirectory: context.xcodeProject.directoryURL,
-                outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("swa-output"),
+                outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("duplicates-output"),
                 targetName: target.displayName,
             )
         }
 
-        private func createSWACommand(
+        private func createDuplicatesCommand(
             binary: URL,
             targetDirectory: URL,
             outputDir: URL,
             targetName: String,
         ) -> [Command] {
-            let arguments = [
-                "unused",
+            var arguments = [
+                "duplicates",
                 targetDirectory.path,
                 "--format", "xcode",
-                "--sensible-defaults",
             ]
+
+            // Check for config file
+            if let configPath = findConfigFile(in: targetDirectory) {
+                arguments += ["--config", configPath.path]
+            }
 
             return [
                 .prebuildCommand(
-                    displayName: "StaticAnalysis \(targetName)",
+                    displayName: "Duplication \(targetName)",
                     executable: binary,
                     arguments: arguments,
                     outputFilesDirectory: outputDir,
@@ -282,7 +279,6 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
-    // Common paths where brew/system tools are installed
     let searchPaths = [
         "/opt/homebrew/bin",
         "/usr/local/bin",
@@ -290,7 +286,6 @@ private func findInPath(_ executable: String) -> URL? {
         "/bin",
     ]
 
-    // Also check PATH environment variable
     let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
     let allPaths = searchPaths + envPath.split(separator: ":").map(String.init)
 

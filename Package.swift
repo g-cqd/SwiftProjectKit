@@ -49,7 +49,7 @@ let package = Package(
             targets: ["SwiftFormatCommandPlugin"]
         ),
 
-        // Static analysis build plugin (runs unused code detection on every build)
+        // Static analysis build plugin (runs both unused + duplicates on every build)
         .plugin(
             name: "StaticAnalysisBuildPlugin",
             targets: ["StaticAnalysisBuildPlugin"]
@@ -59,6 +59,30 @@ let package = Package(
         .plugin(
             name: "StaticAnalysisCommandPlugin",
             targets: ["StaticAnalysisCommandPlugin"]
+        ),
+
+        // Unused code build plugin (runs unused detection on every build)
+        .plugin(
+            name: "UnusedCodeBuildPlugin",
+            targets: ["UnusedCodeBuildPlugin"]
+        ),
+
+        // Duplication build plugin (runs duplication detection on every build)
+        .plugin(
+            name: "DuplicationBuildPlugin",
+            targets: ["DuplicationBuildPlugin"]
+        ),
+
+        // Unused code command plugin (on-demand via `swift package unused`)
+        .plugin(
+            name: "UnusedCodeCommandPlugin",
+            targets: ["UnusedCodeCommandPlugin"]
+        ),
+
+        // Duplication command plugin (on-demand via `swift package duplicates`)
+        .plugin(
+            name: "DuplicationCommandPlugin",
+            targets: ["DuplicationCommandPlugin"]
         ),
     ],
     dependencies: [
@@ -153,6 +177,54 @@ let package = Package(
                 intent: .custom(
                     verb: "analyze",
                     description: "Run static analysis (unused code, duplicates) on Swift source files"
+                ),
+                permissions: [
+                    .allowNetworkConnections(
+                        scope: .all(ports: [443]),
+                        reason: "Download SwiftStaticAnalysis binary from GitHub releases"
+                    ),
+                ]
+            ),
+            dependencies: []
+        ),
+
+        // Unused code plugins
+        .plugin(
+            name: "UnusedCodeBuildPlugin",
+            capability: .buildTool(),
+            dependencies: []
+        ),
+
+        .plugin(
+            name: "UnusedCodeCommandPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "unused",
+                    description: "Detect unused code in Swift source files"
+                ),
+                permissions: [
+                    .allowNetworkConnections(
+                        scope: .all(ports: [443]),
+                        reason: "Download SwiftStaticAnalysis binary from GitHub releases"
+                    ),
+                ]
+            ),
+            dependencies: []
+        ),
+
+        // Duplication plugins
+        .plugin(
+            name: "DuplicationBuildPlugin",
+            capability: .buildTool(),
+            dependencies: []
+        ),
+
+        .plugin(
+            name: "DuplicationCommandPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "duplicates",
+                    description: "Detect code duplication in Swift source files"
                 ),
                 permissions: [
                     .allowNetworkConnections(

@@ -2,18 +2,19 @@
 import Foundation
 import PackagePlugin
 
-// MARK: - StaticAnalysisCommandPlugin
+// MARK: - DuplicationCommandPlugin
 
-/// Command plugin that runs static analysis on-demand.
+/// Command plugin that runs duplication detection on-demand.
 ///
-/// Usage: `swift package analyze [unused|duplicates|all]`
+/// Usage: `swift package duplicates [options]`
 ///
-/// Subcommands:
-/// - `unused`: Detect unused code (variables, functions, types)
-/// - `duplicates`: Detect code duplication (clones)
-/// - `all` (default): Run both analyses
+/// Options:
+/// - `--strict`: Use lower token threshold (30 instead of 50)
+/// - `--target <name>`: Analyze specific target(s)
+/// - `--min-tokens <n>`: Minimum tokens for clone detection
+/// - `--types <exact|near|semantic>`: Clone types to detect
 @main
-struct StaticAnalysisCommandPlugin: CommandPlugin {
+struct DuplicationCommandPlugin: CommandPlugin {
     // MARK: Internal
 
     func performCommand(
@@ -24,17 +25,10 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
         var extractor = ArgumentExtractor(arguments)
         let strict = extractor.extractFlag(named: "strict") > 0
         let targetNames = extractor.extractOption(named: "target")
-        let mode = extractor.extractOption(named: "mode").first ?? "reachability"
-        let remaining = extractor.remainingArguments
-
-        // Determine which analysis to run
-        let analysisType: AnalysisType = if remaining.contains("unused") {
-            .unused
-        } else if remaining.contains("duplicates") {
-            .duplicates
-        } else {
-            .all
-        }
+        let minTokens = extractor.extractOption(named: "min-tokens").first
+        let types = extractor.extractOption(named: "types")
+        let algorithm = extractor.extractOption(named: "algorithm").first
+        let excludePaths = extractor.extractOption(named: "exclude-paths")
 
         // Ensure swa binary is available
         let swaPath = try await ensureSWA(
@@ -54,98 +48,7 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
             return
         }
 
-        // Run analysis
-        switch analysisType {
-        case .unused:
-            try runUnusedAnalysis(
-                swaPath: swaPath,
-                targets: targets,
-                mode: mode,
-                strict: strict,
-                context: context,
-            )
-
-        case .duplicates:
-            try runDuplicatesAnalysis(
-                swaPath: swaPath,
-                targets: targets,
-                strict: strict,
-                context: context,
-            )
-
-        case .all:
-            print("Running unused code detection...")
-            try runUnusedAnalysis(
-                swaPath: swaPath,
-                targets: targets,
-                mode: mode,
-                strict: strict,
-                context: context,
-            )
-
-            print("\nRunning duplication detection...")
-            try runDuplicatesAnalysis(
-                swaPath: swaPath,
-                targets: targets,
-                strict: strict,
-                context: context,
-            )
-        }
-    }
-
-    // MARK: Private
-
-    private enum AnalysisType {
-        case unused
-        case duplicates
-        case all
-    }
-
-    private let defaultVersion = "0.1.0"
-
-    private func runUnusedAnalysis(
-        swaPath: URL,
-        targets: [Target],
-        mode: String,
-        strict: Bool,
-        context: PluginContext,
-    ) throws {
-        var args = ["unused"]
-
-        // Add target directories
-        for target in targets {
-            if let sourceTarget = target as? SourceModuleTarget {
-                args.append(sourceTarget.directoryURL.path)
-            }
-        }
-
-        // Check for config file
-        if let configPath = findConfigFile(in: context.package.directoryURL) {
-            args += ["--config", configPath.path]
-        }
-
-        args += ["--mode", mode]
-        args += ["--sensible-defaults"]
-        args += ["--format", "text"]
-
-        if strict {
-            args += ["--min-confidence", "low"]
-        }
-
-        try runSWA(
-            executableURL: swaPath,
-            arguments: args,
-            currentDirectory: context.package.directoryURL,
-            analysisName: "Unused Code Detection",
-        )
-    }
-
-    private func runDuplicatesAnalysis(
-        swaPath: URL,
-        targets: [Target],
-        strict: Bool,
-        context: PluginContext,
-    ) throws {
+        // Build arguments
         var args = ["duplicates"]
 
         // Add target directories
@@ -160,10 +63,25 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
             args += ["--config", configPath.path]
         }
 
+        // Apply CLI options (override config file)
         args += ["--format", "text"]
 
-        if strict {
+        if let tokens = minTokens {
+            args += ["--min-tokens", tokens]
+        } else if strict {
             args += ["--min-tokens", "30"]
+        }
+
+        for type in types {
+            args += ["--types", type]
+        }
+
+        if let alg = algorithm {
+            args += ["--algorithm", alg]
+        }
+
+        for path in excludePaths {
+            args += ["--exclude-paths", path]
         }
 
         try runSWA(
@@ -174,16 +92,9 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
         )
     }
 
-    private func findConfigFile(in directory: URL) -> URL? {
-        let configNames = [".swa.json", "swa.json"]
-        for name in configNames {
-            let path = directory.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: path.path) {
-                return path
-            }
-        }
-        return nil
-    }
+    // MARK: Private
+
+    private let defaultVersion = "0.1.0"
 
     private func runSWA(
         executableURL: URL,
@@ -221,8 +132,7 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
         print("\(analysisName) completed successfully")
     }
 
-    // MARK: - Binary Management
-
+    // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH
         if let systemPath = findInPath("swa") {
@@ -279,6 +189,17 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
 
         return binaryPath
     }
+
+    private func findConfigFile(in directory: URL) -> URL? {
+        let configNames = [".swa.json", "swa.json"]
+        for name in configNames {
+            let path = directory.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: path.path) {
+                return path
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Xcode Project Support
@@ -286,101 +207,50 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
 #if canImport(XcodeProjectPlugin)
     import XcodeProjectPlugin
 
-    extension StaticAnalysisCommandPlugin: XcodeCommandPlugin {
+    extension DuplicationCommandPlugin: XcodeCommandPlugin {
         func performCommand(
             context: XcodePluginContext,
             arguments: [String],
         ) throws {
             var extractor = ArgumentExtractor(arguments)
             let strict = extractor.extractFlag(named: "strict") > 0
-            let remaining = extractor.remainingArguments
-
-            let analysisType: AnalysisType = if remaining.contains("unused") {
-                .unused
-            } else if remaining.contains("duplicates") {
-                .duplicates
-            } else {
-                .all
-            }
+            let minTokens = extractor.extractOption(named: "min-tokens").first
+            let types = extractor.extractOption(named: "types")
+            let algorithm = extractor.extractOption(named: "algorithm").first
+            let excludePaths = extractor.extractOption(named: "exclude-paths")
 
             let binaryPath = try ensureSWABinary(in: context.pluginWorkDirectoryURL)
             let projectDir = context.xcodeProject.directoryURL
 
-            switch analysisType {
-            case .unused:
-                try runXcodeAnalysis(
-                    swaPath: binaryPath,
-                    command: "unused",
-                    projectDir: projectDir,
-                    strict: strict,
-                )
+            var args = ["duplicates", projectDir.path]
 
-            case .duplicates:
-                try runXcodeAnalysis(
-                    swaPath: binaryPath,
-                    command: "duplicates",
-                    projectDir: projectDir,
-                    strict: strict,
-                )
-
-            case .all:
-                print("Running unused code detection...")
-                try runXcodeAnalysis(
-                    swaPath: binaryPath,
-                    command: "unused",
-                    projectDir: projectDir,
-                    strict: strict,
-                )
-
-                print("\nRunning duplication detection...")
-                try runXcodeAnalysis(
-                    swaPath: binaryPath,
-                    command: "duplicates",
-                    projectDir: projectDir,
-                    strict: strict,
-                )
-            }
-        }
-
-        private func ensureSWABinary(in workDirectory: URL) throws -> URL {
-            // Check system PATH first
-            if let systemPath = findInPath("swa") {
-                print("Using system-installed swa at \(systemPath.path)")
-                return systemPath
+            // Check for config file
+            if let configPath = findConfigFile(in: projectDir) {
+                args += ["--config", configPath.path]
             }
 
-            let binaryDir = workDirectory
-                .appendingPathComponent("bin")
-                .appendingPathComponent("swa")
-                .appendingPathComponent(defaultVersion)
-            let binaryPath = binaryDir.appendingPathComponent("swa")
-
-            if !FileManager.default.fileExists(atPath: binaryPath.path) {
-                try downloadSWASync(to: binaryDir, version: defaultVersion)
-            }
-
-            return binaryPath
-        }
-
-        private func runXcodeAnalysis(
-            swaPath: URL,
-            command: String,
-            projectDir: URL,
-            strict: Bool,
-        ) throws {
-            var args = [command, projectDir.path]
-            args += ["--sensible-defaults"]
             args += ["--format", "text"]
 
-            if strict, command == "unused" {
-                args += ["--min-confidence", "low"]
-            }
-            if strict, command == "duplicates" {
+            if let tokens = minTokens {
+                args += ["--min-tokens", tokens]
+            } else if strict {
                 args += ["--min-tokens", "30"]
             }
 
+            for type in types {
+                args += ["--types", type]
+            }
+
+            if let alg = algorithm {
+                args += ["--algorithm", alg]
+            }
+
+            for path in excludePaths {
+                args += ["--exclude-paths", path]
+            }
+
             let process = Process()
-            process.executableURL = swaPath
+            process.executableURL = binaryPath
             process.arguments = args
             process.currentDirectoryURL = projectDir
 
@@ -405,10 +275,30 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
             if !errors.isEmpty { Diagnostics.error(errors) }
 
             if process.terminationStatus != 0 {
-                throw CommandError.analysisFailed(name: command, exitCode: process.terminationStatus)
+                throw CommandError.analysisFailed(name: "duplicates", exitCode: process.terminationStatus)
             }
 
-            print("\(command.capitalized) analysis completed successfully")
+            print("Duplication detection completed successfully")
+        }
+
+        private func ensureSWABinary(in workDirectory: URL) throws -> URL {
+            // Check system PATH first
+            if let systemPath = findInPath("swa") {
+                print("Using system-installed swa at \(systemPath.path)")
+                return systemPath
+            }
+
+            let binaryDir = workDirectory
+                .appendingPathComponent("bin")
+                .appendingPathComponent("swa")
+                .appendingPathComponent(defaultVersion)
+            let binaryPath = binaryDir.appendingPathComponent("swa")
+
+            if !FileManager.default.fileExists(atPath: binaryPath.path) {
+                try downloadSWASync(to: binaryDir, version: defaultVersion)
+            }
+
+            return binaryPath
         }
 
         private func downloadSWASync(to binaryDir: URL, version: String) throws {
