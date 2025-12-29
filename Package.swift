@@ -49,16 +49,16 @@ let package = Package(
             targets: ["SwiftFormatCommandPlugin"]
         ),
 
-        // Static analysis build plugin (runs both unused + duplicates on every build)
+        // SWA build plugin (runs both unused + duplicates on every build)
         .plugin(
-            name: "StaticAnalysisBuildPlugin",
-            targets: ["StaticAnalysisBuildPlugin"]
+            name: "SWABuildPlugin",
+            targets: ["SWABuildPlugin"]
         ),
 
-        // Static analysis command plugin (on-demand via `swift package analyze`)
+        // SWA command plugin (on-demand via `swift package swa`)
         .plugin(
-            name: "StaticAnalysisCommandPlugin",
-            targets: ["StaticAnalysisCommandPlugin"]
+            name: "SWACommandPlugin",
+            targets: ["SWACommandPlugin"]
         ),
 
         // Unused code build plugin (runs unused detection on every build)
@@ -163,19 +163,19 @@ let package = Package(
             dependencies: []
         ),
 
-        // MARK: - Static Analysis Plugins
+        // MARK: - SWA Plugins (Static Analysis)
 
         .plugin(
-            name: "StaticAnalysisBuildPlugin",
+            name: "SWABuildPlugin",
             capability: .buildTool(),
             dependencies: []
         ),
 
         .plugin(
-            name: "StaticAnalysisCommandPlugin",
+            name: "SWACommandPlugin",
             capability: .command(
                 intent: .custom(
-                    verb: "analyze",
+                    verb: "swa",
                     description: "Run static analysis (unused code, duplicates) on Swift source files"
                 ),
                 permissions: [

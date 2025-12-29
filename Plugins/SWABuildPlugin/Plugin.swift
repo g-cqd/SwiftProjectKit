@@ -1,14 +1,14 @@
 import Foundation
 import PackagePlugin
 
-// MARK: - StaticAnalysisBuildPlugin
+// MARK: - SWABuildPlugin
 
 /// Build tool plugin that runs static analysis (unused code detection) on every build.
 ///
 /// This plugin downloads SwiftStaticAnalysis (`swa`) from GitHub releases and caches it
 /// in the plugin work directory. It runs as a pre-build command.
 @main
-struct StaticAnalysisBuildPlugin: BuildToolPlugin {
+struct SWABuildPlugin: BuildToolPlugin {
     // MARK: Internal
 
     func createBuildCommands(
@@ -156,7 +156,7 @@ struct StaticAnalysisBuildPlugin: BuildToolPlugin {
 #if canImport(XcodeProjectPlugin)
     import XcodeProjectPlugin
 
-    extension StaticAnalysisBuildPlugin: XcodeBuildToolPlugin {
+    extension SWABuildPlugin: XcodeBuildToolPlugin {
         // swiftlint:disable:next function_body_length
         func createBuildCommands(
             context: XcodePluginContext,

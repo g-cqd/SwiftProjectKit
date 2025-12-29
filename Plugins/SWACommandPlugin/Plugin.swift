@@ -2,18 +2,18 @@
 import Foundation
 import PackagePlugin
 
-// MARK: - StaticAnalysisCommandPlugin
+// MARK: - SWACommandPlugin
 
 /// Command plugin that runs static analysis on-demand.
 ///
-/// Usage: `swift package analyze [unused|duplicates|all]`
+/// Usage: `swift package swa [unused|duplicates|all]`
 ///
 /// Subcommands:
 /// - `unused`: Detect unused code (variables, functions, types)
 /// - `duplicates`: Detect code duplication (clones)
 /// - `all` (default): Run both analyses
 @main
-struct StaticAnalysisCommandPlugin: CommandPlugin {
+struct SWACommandPlugin: CommandPlugin {
     // MARK: Internal
 
     func performCommand(
@@ -286,7 +286,7 @@ struct StaticAnalysisCommandPlugin: CommandPlugin {
 #if canImport(XcodeProjectPlugin)
     import XcodeProjectPlugin
 
-    extension StaticAnalysisCommandPlugin: XcodeCommandPlugin {
+    extension SWACommandPlugin: XcodeCommandPlugin {
         func performCommand(
             context: XcodePluginContext,
             arguments: [String],
