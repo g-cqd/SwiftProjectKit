@@ -32,3 +32,6 @@ DerivedData/
 *.p12
 credentials.json
 secrets.json
+
+# Local plans (not tracked)
+.plans/

@@ -48,6 +48,18 @@ let package = Package(
             name: "SwiftFormatCommandPlugin",
             targets: ["SwiftFormatCommandPlugin"]
         ),
+
+        // Static analysis build plugin (runs unused code detection on every build)
+        .plugin(
+            name: "StaticAnalysisBuildPlugin",
+            targets: ["StaticAnalysisBuildPlugin"]
+        ),
+
+        // Static analysis command plugin (on-demand via `swift package analyze`)
+        .plugin(
+            name: "StaticAnalysisCommandPlugin",
+            targets: ["StaticAnalysisCommandPlugin"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
@@ -121,6 +133,31 @@ let package = Package(
                     .allowNetworkConnections(
                         scope: .all(ports: [443]),
                         reason: "Download SwiftFormat binary from GitHub releases"
+                    ),
+                ]
+            ),
+            dependencies: []
+        ),
+
+        // MARK: - Static Analysis Plugins
+
+        .plugin(
+            name: "StaticAnalysisBuildPlugin",
+            capability: .buildTool(),
+            dependencies: []
+        ),
+
+        .plugin(
+            name: "StaticAnalysisCommandPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "analyze",
+                    description: "Run static analysis (unused code, duplicates) on Swift source files"
+                ),
+                permissions: [
+                    .allowNetworkConnections(
+                        scope: .all(ports: [443]),
+                        reason: "Download SwiftStaticAnalysis binary from GitHub releases"
                     ),
                 ]
             ),
