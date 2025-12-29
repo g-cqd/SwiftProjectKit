@@ -120,14 +120,16 @@ actor MockNetworkSession: NetworkSession {
     }
 
     func setResponse(localURL: URL, httpStatusCode: Int) {
-        // swiftlint:disable:next force_unwrapping
-        let response = HTTPURLResponse(
-            url: URL(string: "https://example.com")!,
-            statusCode: httpStatusCode,
-            httpVersion: nil,
-            headerFields: nil,
-        )!
-        // swiftlint:enable:previous force_unwrapping
+        guard let mockURL = URL(string: "https://example.com"),
+              let response = HTTPURLResponse(
+                  url: mockURL,
+                  statusCode: httpStatusCode,
+                  httpVersion: nil,
+                  headerFields: nil
+              )
+        else {
+            fatalError("Test configuration error: Failed to create mock URL or HTTPURLResponse")
+        }
         _responseToReturn = (localURL, response)
     }
 

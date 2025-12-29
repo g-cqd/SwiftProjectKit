@@ -38,28 +38,105 @@ struct InitCommand: AsyncParsableCommand {
 
     func run() async throws {
         let outputURL = URL(fileURLWithPath: output).appendingPathComponent(name)
-
         print("Creating \(type.rawValue) '\(name)' at \(outputURL.path)...")
 
+        try createProjectStructure(at: outputURL)
+        try createConfigurationFiles(at: outputURL)
+
+        print("\nProject '\(name)' created successfully!")
+        print("\nNext steps:")
+        print("  cd \(name)")
+        print("  swift build")
+        print("  swift test")
+    }
+
+    private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
 
-        // Create Package.swift
         if type == .package {
-            let packageSwift = generatePackageSwift(name: name)
-            try packageSwift.write(
+            try generatePackageSwift(name: name).write(
                 to: outputURL.appendingPathComponent("Package.swift"),
                 atomically: true,
                 encoding: .utf8,
             )
         }
 
-        // Create source directory
         let sourcesDir = outputURL.appendingPathComponent("Sources/\(name)")
         try fm.createDirectory(at: sourcesDir, withIntermediateDirectories: true)
+        try generateMainFile().write(
+            to: sourcesDir.appendingPathComponent("\(name).swift"),
+            atomically: true,
+            encoding: .utf8,
+        )
 
-        // Create main file
-        let mainFile = """
+        let testsDir = outputURL.appendingPathComponent("Tests/\(name)Tests")
+        try fm.createDirectory(at: testsDir, withIntermediateDirectories: true)
+        try generateTestFile().write(
+            to: testsDir.appendingPathComponent("\(name)Tests.swift"),
+            atomically: true,
+            encoding: .utf8,
+        )
+    }
+
+    private func createConfigurationFiles(at outputURL: URL) throws {
+        let fm = FileManager.default
+
+        if !noSwiftlint {
+            try generateSwiftLintConfig().write(
+                to: outputURL.appendingPathComponent(".swiftlint.yml"),
+                atomically: true,
+                encoding: .utf8,
+            )
+            print("  Created .swiftlint.yml")
+        }
+
+        if !noSwiftformat {
+            try generateSwiftFormatConfig().write(
+                to: outputURL.appendingPathComponent(".swiftformat"),
+                atomically: true,
+                encoding: .utf8,
+            )
+            print("  Created .swiftformat")
+        }
+
+        if !noWorkflows {
+            let workflowsDir = outputURL.appendingPathComponent(".github/workflows")
+            try fm.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
+            try generateCIWorkflow(name: name, platforms: .applePlatforms).write(
+                to: workflowsDir.appendingPathComponent("ci.yml"),
+                atomically: true,
+                encoding: .utf8,
+            )
+            print("  Created .github/workflows/ci.yml")
+        }
+
+        if !noClaude {
+            try generateClaudeMd().write(
+                to: outputURL.appendingPathComponent("CLAUDE.md"),
+                atomically: true,
+                encoding: .utf8,
+            )
+            print("  Created CLAUDE.md")
+        }
+
+        try generateReadme(name: name).write(
+            to: outputURL.appendingPathComponent("README.md"),
+            atomically: true,
+            encoding: .utf8,
+        )
+        print("  Created README.md")
+
+        try generateGitignore().write(
+            to: outputURL.appendingPathComponent(".gitignore"),
+            atomically: true,
+            encoding: .utf8,
+        )
+        print("  Created .gitignore")
+    }
+
+    private func generateMainFile() -> String {
+        """
         // \(name)
         // Created with SwiftProjectKit
 
@@ -69,17 +146,10 @@ struct InitCommand: AsyncParsableCommand {
             public init() {}
         }
         """
-        try mainFile.write(
-            to: sourcesDir.appendingPathComponent("\(name).swift"),
-            atomically: true,
-            encoding: .utf8,
-        )
+    }
 
-        // Create tests directory
-        let testsDir = outputURL.appendingPathComponent("Tests/\(name)Tests")
-        try fm.createDirectory(at: testsDir, withIntermediateDirectories: true)
-
-        let testFile = """
+    private func generateTestFile() -> String {
+        """
         import Testing
         @testable import \(name)
 
@@ -88,82 +158,6 @@ struct InitCommand: AsyncParsableCommand {
             #expect(true)
         }
         """
-        try testFile.write(
-            to: testsDir.appendingPathComponent("\(name)Tests.swift"),
-            atomically: true,
-            encoding: .utf8,
-        )
-
-        // SwiftLint config
-        if !noSwiftlint {
-            let swiftlintConfig = generateSwiftLintConfig()
-            try swiftlintConfig.write(
-                to: outputURL.appendingPathComponent(".swiftlint.yml"),
-                atomically: true,
-                encoding: .utf8,
-            )
-            print("  Created .swiftlint.yml")
-        }
-
-        // SwiftFormat config
-        if !noSwiftformat {
-            let swiftformatConfig = generateSwiftFormatConfig()
-            try swiftformatConfig.write(
-                to: outputURL.appendingPathComponent(".swiftformat"),
-                atomically: true,
-                encoding: .utf8,
-            )
-            print("  Created .swiftformat")
-        }
-
-        // GitHub workflows
-        if !noWorkflows {
-            let workflowsDir = outputURL.appendingPathComponent(".github/workflows")
-            try fm.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
-
-            let ciWorkflow = generateCIWorkflow(name: name, platforms: .applePlatforms)
-            try ciWorkflow.write(
-                to: workflowsDir.appendingPathComponent("ci.yml"),
-                atomically: true,
-                encoding: .utf8,
-            )
-            print("  Created .github/workflows/ci.yml")
-        }
-
-        // CLAUDE.md
-        if !noClaude {
-            let claudeMd = generateClaudeMd()
-            try claudeMd.write(
-                to: outputURL.appendingPathComponent("CLAUDE.md"),
-                atomically: true,
-                encoding: .utf8,
-            )
-            print("  Created CLAUDE.md")
-        }
-
-        // README.md
-        let readme = generateReadme(name: name)
-        try readme.write(
-            to: outputURL.appendingPathComponent("README.md"),
-            atomically: true,
-            encoding: .utf8,
-        )
-        print("  Created README.md")
-
-        // .gitignore
-        let gitignore = generateGitignore()
-        try gitignore.write(
-            to: outputURL.appendingPathComponent(".gitignore"),
-            atomically: true,
-            encoding: .utf8,
-        )
-        print("  Created .gitignore")
-
-        print("\nProject '\(name)' created successfully!")
-        print("\nNext steps:")
-        print("  cd \(name)")
-        print("  swift build")
-        print("  swift test")
     }
 
     // MARK: Private

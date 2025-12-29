@@ -117,9 +117,11 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             return binaryPath
         }
 
-        let downloadURL = URL(
-            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
-        )!
+        guard let downloadURL = URL(
+            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+        ) else {
+            throw CommandError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
+        }
 
         print("Downloading SwiftFormat \(version)...")
 
@@ -237,9 +239,11 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         }
 
         private func downloadSwiftFormatSync(to binaryDir: URL, version: String) throws {
-            let downloadURL = URL(
-                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
-            )!
+            guard let downloadURL = URL(
+                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip"
+            ) else {
+                throw CommandError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
+            }
 
             let semaphore = DispatchSemaphore(value: 0)
             var downloadError: Error?

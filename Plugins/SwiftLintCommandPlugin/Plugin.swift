@@ -118,9 +118,11 @@ struct SwiftLintCommandPlugin: CommandPlugin {
             return binaryPath
         }
 
-        let downloadURL = URL(
-            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
-        )!
+        guard let downloadURL = URL(
+            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+        ) else {
+            throw CommandError.downloadFailed(tool: "SwiftLint", statusCode: 0)
+        }
 
         print("Downloading SwiftLint \(version)...")
 
@@ -239,9 +241,11 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         }
 
         private func downloadSwiftLintSync(to binaryDir: URL, version: String) throws {
-            let downloadURL = URL(
-                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
-            )!
+            guard let downloadURL = URL(
+                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+            ) else {
+                throw CommandError.downloadFailed(tool: "SwiftLint", statusCode: 0)
+            }
 
             let semaphore = DispatchSemaphore(value: 0)
             var downloadError: Error?

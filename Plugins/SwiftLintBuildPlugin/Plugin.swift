@@ -95,9 +95,11 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
         }
 
         // Download from GitHub releases
-        let downloadURL = URL(
-            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
-        )!
+        guard let downloadURL = URL(
+            string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+        ) else {
+            throw PluginError.downloadFailed(tool: "SwiftLint", statusCode: 0)
+        }
 
         Diagnostics.remark("Downloading SwiftLint \(version)...")
 
@@ -208,9 +210,11 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
         }
 
         private func downloadSwiftLintSync(to binaryDir: URL, version: String) throws {
-            let downloadURL = URL(
-                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip",
-            )!
+            guard let downloadURL = URL(
+                string: "https://github.com/realm/SwiftLint/releases/download/\(version)/portable_swiftlint.zip"
+            ) else {
+                throw PluginError.downloadFailed(tool: "SwiftLint", statusCode: 0)
+            }
 
             // Synchronous download for Xcode context
             let semaphore = DispatchSemaphore(value: 0)
