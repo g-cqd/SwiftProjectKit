@@ -164,5 +164,6 @@ public extension DefaultConfigs {
 
     --disable acronyms
     --disable redundantOptionalBinding
+    --disable wrapMultilineStatementBraces
     """
 }
