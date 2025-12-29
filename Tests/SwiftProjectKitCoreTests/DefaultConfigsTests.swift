@@ -187,11 +187,24 @@ struct CIWorkflowTests {
         #expect(!workflow.contains("matrix:"))
     }
 
-    @Test("CI workflow for multiple platforms has matrix")
-    func multiplePlatformsHasMatrix() {
+    @Test("CI workflow excludes platform matrix by default")
+    func excludesPlatformMatrixByDefault() {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .allPlatforms,
+        )
+
+        // Platform matrix is opt-in, not included by default (for CLI/tooling packages)
+        #expect(!workflow.contains("build-platforms:"))
+        #expect(!workflow.contains("strategy:"))
+    }
+
+    @Test("CI workflow for multiple platforms has matrix when requested")
+    func multiplePlatformsHasMatrixWhenRequested() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .allPlatforms,
+            includePlatformMatrix: true,
         )
 
         #expect(workflow.contains("build-platforms:"))
@@ -275,6 +288,7 @@ struct CIWorkflowTests {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: iOSMacOS,
+            includePlatformMatrix: true,
         )
 
         #expect(workflow.contains("platform: iOS"))
@@ -289,6 +303,7 @@ struct CIWorkflowTests {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "MyAwesomePackage",
             platforms: .allPlatforms,
+            includePlatformMatrix: true,
         )
 
         #expect(workflow.contains("-scheme MyAwesomePackage"))

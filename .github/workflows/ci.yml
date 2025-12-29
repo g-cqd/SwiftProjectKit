@@ -128,50 +128,7 @@ jobs:
           category: "/language:swift"
 
   # ============================================================================
-  # Stage 4: Platform Matrix Build (PRs and main branch)
-  # ============================================================================
-  build-platforms:
-    name: Build (${{ matrix.platform }})
-    runs-on: macos-15
-    needs: lint
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    strategy:
-      matrix:
-        include:
-          - platform: iOS
-            destination: 'generic/platform=iOS Simulator'
-          - platform: macOS
-            destination: 'platform=macOS'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Cache SPM Dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            .build
-            ~/Library/Developer/Xcode/DerivedData
-          key: spm-${{ runner.os }}-xcode-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-xcode-
-
-      - name: Ensure Linting Tools
-        run: |
-          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
-
-      - name: Build for ${{ matrix.platform }}
-        run: |
-          xcodebuild build \
-            -scheme SwiftProjectKit \
-            -destination '${{ matrix.destination }}' \
-            -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO
-
-  # ============================================================================
-  # Stage 5: Release Validation (Tags and workflow_dispatch only)
+  # Stage 4: Release Validation (Tags and workflow_dispatch only)
   # ============================================================================
   validate-release:
     name: Validate Release
@@ -217,7 +174,7 @@ jobs:
           echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
 
   # ============================================================================
-  # Stage 6: Generate Changelog (Tags and workflow_dispatch, runs on Linux)
+  # Stage 5: Generate Changelog (Tags and workflow_dispatch, runs on Linux)
   # ============================================================================
   changelog:
     name: Generate Changelog
@@ -254,7 +211,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
   # ============================================================================
-  # Stage 7: Create GitHub Release (Tags and workflow_dispatch)
+  # Stage 6: Create GitHub Release (Tags and workflow_dispatch)
   # ============================================================================
   release:
     name: Create Release

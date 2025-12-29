@@ -41,7 +41,12 @@ import Testing
     #expect(workflow.contains("swift build"))
     #expect(!workflow.contains("build-platforms")) // No platform matrix for macOS-only
 
-    let multiPlatformWorkflow = DefaultConfigs.ciWorkflow(name: "TestPackage", platforms: .allPlatforms)
+    // Platform matrix is opt-in (for library packages targeting multiple platforms)
+    let multiPlatformWorkflow = DefaultConfigs.ciWorkflow(
+        name: "TestPackage",
+        platforms: .allPlatforms,
+        includePlatformMatrix: true
+    )
     #expect(multiPlatformWorkflow.contains("build-platforms"))
     #expect(multiPlatformWorkflow.contains("iOS"))
 }

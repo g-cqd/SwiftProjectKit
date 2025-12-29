@@ -8,18 +8,21 @@ public extension DefaultConfigs {
     ///   - name: The project name (used in release notes)
     ///   - platforms: Platform configuration for matrix builds
     ///   - includeRelease: Whether to include release jobs (default: true)
+    ///   - includePlatformMatrix: Whether to include platform matrix builds (default: false for CLI/tooling)
     /// - Returns: The complete workflow YAML string
     static func ciWorkflow(
         name: String,
         platforms: PlatformConfiguration,
         includeRelease: Bool = true,
+        includePlatformMatrix: Bool = false,
     ) -> String {
         var workflow = ciWorkflowHeader(includeRelease: includeRelease)
         workflow += ciLintJob()
         workflow += ciBuildAndTestJob()
         workflow += ciCodeQLJob()
 
-        if platforms.enabledPlatforms.count > 1 {
+        // Only include platform matrix if explicitly requested AND multiple platforms configured
+        if includePlatformMatrix, platforms.enabledPlatforms.count > 1 {
             workflow += ciPlatformMatrixJob(name: name, platforms: platforms)
         }
 
