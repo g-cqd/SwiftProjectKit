@@ -53,15 +53,14 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
+              - name: Install Linting Tools
+                run: brew install swiftlint swiftformat || true
+
               - name: SwiftLint
-                run: |
-                  brew install swiftlint
-                  swiftlint lint --strict --reporter github-actions-logging
+                run: swiftlint lint --strict --reporter github-actions-logging
 
               - name: SwiftFormat
-                run: |
-                  brew install swiftformat
-                  swiftformat --lint .
+                run: swiftformat --lint .
 
         """
     }
@@ -77,6 +76,9 @@ extension DefaultConfigs {
 
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
+
+              - name: Install Linting Tools
+                run: brew install swiftlint swiftformat || true
 
               - name: Build
                 run: swift build -c release
@@ -103,6 +105,9 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
+              - name: Install Linting Tools
+                run: brew install swiftlint swiftformat || true
+
               - name: Initialize CodeQL
                 uses: github/codeql-action/init@v3
                 with:
@@ -110,7 +115,7 @@ extension DefaultConfigs {
                   build-mode: manual
 
               - name: Build for CodeQL
-                run: swift build -c release
+                run: swift build -c release --arch arm64
 
               - name: Perform CodeQL Analysis
                 uses: github/codeql-action/analyze@v3
@@ -140,6 +145,9 @@ extension DefaultConfigs {
 
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
+
+              - name: Install Linting Tools
+                run: brew install swiftlint swiftformat || true
 
               - name: Build for ${{ matrix.platform }}
                 run: |

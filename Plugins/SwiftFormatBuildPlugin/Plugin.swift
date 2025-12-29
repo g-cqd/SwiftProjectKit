@@ -83,6 +83,12 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
     }
 
     private func ensureSwiftFormat(in workDirectory: URL, version: String) async throws -> URL {
+        // First, check if swiftformat is available in PATH (system-installed via brew/mint)
+        if let systemPath = findInPath("swiftformat") {
+            Diagnostics.remark("Using system-installed SwiftFormat at \(systemPath.path)")
+            return systemPath
+        }
+
         let binaryDir = workDirectory
             .appendingPathComponent("bin")
             .appendingPathComponent("swiftformat")
@@ -159,6 +165,18 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
                 return []
             }
 
+            // First, check if swiftformat is available in PATH (system-installed via brew/mint)
+            if let systemPath = findInPath("swiftformat") {
+                Diagnostics.remark("Using system-installed SwiftFormat at \(systemPath.path)")
+                return createSwiftFormatCommand(
+                    binary: systemPath,
+                    sourceFiles: sourceFiles,
+                    configDir: context.xcodeProject.directoryURL,
+                    outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("swiftformat-output"),
+                    targetName: target.displayName,
+                )
+            }
+
             // Check for cached binary
             let binaryDir = context.pluginWorkDirectoryURL
                 .appendingPathComponent("bin")
@@ -193,6 +211,29 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
                 .prebuildCommand(
                     displayName: "SwiftFormat \(target.displayName)",
                     executable: binaryPath,
+                    arguments: arguments,
+                    outputFilesDirectory: outputDir,
+                ),
+            ]
+        }
+
+        private func createSwiftFormatCommand(
+            binary: URL,
+            sourceFiles: [URL],
+            configDir: URL,
+            outputDir: URL,
+            targetName: String,
+        ) -> [Command] {
+            var arguments = ["--lint", "--quiet"]
+            if let configPath = findConfigFile(in: configDir) {
+                arguments += ["--config", configPath.path]
+            }
+            arguments += sourceFiles.map(\.path)
+
+            return [
+                .prebuildCommand(
+                    displayName: "SwiftFormat \(targetName)",
+                    executable: binary,
                     arguments: arguments,
                     outputFilesDirectory: outputDir,
                 ),
@@ -252,6 +293,31 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
         }
     }
 #endif
+
+// MARK: - PATH Lookup
+
+/// Find an executable in the system PATH
+private func findInPath(_ executable: String) -> URL? {
+    // Common paths where brew/system tools are installed
+    let searchPaths = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+
+    // Also check PATH environment variable
+    let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    let allPaths = searchPaths + envPath.split(separator: ":").map(String.init)
+
+    for dir in allPaths {
+        let fullPath = URL(fileURLWithPath: dir).appendingPathComponent(executable)
+        if FileManager.default.isExecutableFile(atPath: fullPath.path) {
+            return fullPath
+        }
+    }
+    return nil
+}
 
 // MARK: - PluginError
 
