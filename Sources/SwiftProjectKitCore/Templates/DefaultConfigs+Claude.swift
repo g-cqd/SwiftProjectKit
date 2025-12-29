@@ -3,7 +3,6 @@ import Foundation
 // MARK: - CLAUDE.md
 
 public extension DefaultConfigs {
-    // swiftlint:disable line_length
     static let claudeMd = """
     # Elite Software Engineer Guidelines
 
@@ -169,5 +168,4 @@ public extension DefaultConfigs {
     4. Is it thread-safe (Swift 6 strict)?
     5. Did I use Swift best practices (Value types, POP, strict typing)?
     """
-    // swiftlint:enable line_length
 }
