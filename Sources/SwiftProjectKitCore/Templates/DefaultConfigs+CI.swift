@@ -53,8 +53,10 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
-              - name: Install Linting Tools
-                run: brew install swiftlint swiftformat || true
+              - name: Ensure Linting Tools
+                run: |
+                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: SwiftLint
                 run: swiftlint lint --strict --reporter github-actions-logging
@@ -77,8 +79,10 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
-              - name: Install Linting Tools
-                run: brew install swiftlint swiftformat || true
+              - name: Ensure Linting Tools
+                run: |
+                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: Build
                 run: swift build -c release
@@ -105,8 +109,10 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
-              - name: Install Linting Tools
-                run: brew install swiftlint swiftformat || true
+              - name: Ensure Linting Tools
+                run: |
+                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: Initialize CodeQL
                 uses: github/codeql-action/init@v3
@@ -146,8 +152,10 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
-              - name: Install Linting Tools
-                run: brew install swiftlint swiftformat || true
+              - name: Ensure Linting Tools
+                run: |
+                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: Build for ${{ matrix.platform }}
                 run: |
