@@ -41,7 +41,9 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
         }
 
         // Build arguments
-        var arguments = ["lint", "--quiet", "--reporter", "xcode"]
+        // --no-cache: Prevents cache permission errors in CI sandboxed environments
+        // --force-exclude: Ensures exclusions work even when files are passed directly
+        var arguments = ["lint", "--quiet", "--no-cache", "--force-exclude", "--reporter", "xcode"]
 
         // Look for config file
         if let configPath = findConfigFile(in: context.package.directoryURL) {
@@ -67,7 +69,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
     // MARK: Private
 
     /// Default SwiftLint version to use
-    private let defaultVersion = "0.57.1"
+    private let defaultVersion = "0.62.0"
 
     // MARK: - Private Helpers
 
@@ -181,13 +183,13 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
             let binaryDir = context.pluginWorkDirectoryURL
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftlint")
-                .appendingPathComponent("0.57.1")
+                .appendingPathComponent("0.62.0")
             let binaryPath = binaryDir.appendingPathComponent("swiftlint")
 
             // If binary doesn't exist, try to download synchronously
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
                 do {
-                    try downloadSwiftLintSync(to: binaryDir, version: "0.57.1")
+                    try downloadSwiftLintSync(to: binaryDir, version: "0.62.0")
                 } catch {
                     Diagnostics.warning("SwiftLint not available: \(error.localizedDescription)")
                     return []
@@ -195,7 +197,9 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
             }
 
             // Build arguments
-            var arguments = ["lint", "--quiet", "--reporter", "xcode"]
+            // --no-cache: Prevents cache permission errors in CI sandboxed environments
+            // --force-exclude: Ensures exclusions work even when files are passed directly
+            var arguments = ["lint", "--quiet", "--no-cache", "--force-exclude", "--reporter", "xcode"]
 
             // Look for config file in project directory
             if let configPath = findConfigFile(in: context.xcodeProject.directoryURL) {
@@ -223,7 +227,9 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
             outputDir: URL,
             targetName: String,
         ) -> [Command] {
-            var arguments = ["lint", "--quiet", "--reporter", "xcode"]
+            // --no-cache: Prevents cache permission errors in CI sandboxed environments
+            // --force-exclude: Ensures exclusions work even when files are passed directly
+            var arguments = ["lint", "--quiet", "--no-cache", "--force-exclude", "--reporter", "xcode"]
             if let configPath = findConfigFile(in: configDir) {
                 arguments += ["--config", configPath.path]
             }

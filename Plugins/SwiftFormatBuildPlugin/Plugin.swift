@@ -67,7 +67,7 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
     // MARK: Private
 
     /// Default SwiftFormat version to use
-    private let defaultVersion = "0.54.6"
+    private let defaultVersion = "0.58.7"
 
     // MARK: - Private Helpers
 
@@ -181,13 +181,13 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
             let binaryDir = context.pluginWorkDirectoryURL
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftformat")
-                .appendingPathComponent("0.54.6")
+                .appendingPathComponent("0.58.7")
             let binaryPath = binaryDir.appendingPathComponent("swiftformat")
 
             // If binary doesn't exist, try to download synchronously
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
                 do {
-                    try downloadSwiftFormatSync(to: binaryDir, version: "0.54.6")
+                    try downloadSwiftFormatSync(to: binaryDir, version: "0.58.7")
                 } catch {
                     Diagnostics.warning("SwiftFormat not available: \(error.localizedDescription)")
                     return []
