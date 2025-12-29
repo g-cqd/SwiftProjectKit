@@ -9,6 +9,7 @@ disabled_rules:
   - opening_brace
   - for_where
   - sorted_imports
+  - extension_access_modifier
 
 opt_in_rules:
   - array_init
@@ -25,7 +26,6 @@ opt_in_rules:
   - empty_string
   - enum_case_associated_values_count
   - explicit_init
-  - extension_access_modifier
   - fallthrough
   - fatal_error_message
   - first_where
