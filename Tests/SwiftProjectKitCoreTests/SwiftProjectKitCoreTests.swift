@@ -45,7 +45,7 @@ import Testing
     let multiPlatformWorkflow = DefaultConfigs.ciWorkflow(
         name: "TestPackage",
         platforms: .allPlatforms,
-        includePlatformMatrix: true
+        includePlatformMatrix: true,
     )
     #expect(multiPlatformWorkflow.contains("build-platforms"))
     #expect(multiPlatformWorkflow.contains("iOS"))

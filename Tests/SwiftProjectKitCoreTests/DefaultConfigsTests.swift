@@ -310,7 +310,7 @@ struct CIWorkflowTests {
     }
 }
 
-// MARK: - Release Support Tests (Unified CI/CD Workflow)
+// MARK: - ReleaseSupportTests
 
 @Suite("Release Support Tests")
 struct ReleaseSupportTests {
