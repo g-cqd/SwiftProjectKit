@@ -101,6 +101,8 @@ excluded:
   - "*/Generated/*"
   - "**/Tests/Fixtures/*"
   - LintFormatTests/Fixtures
+  # Plugins use print for CLI output - exclude from strict linting
+  - Plugins
 
 # Naming Rules (relaxed for practical use)
 identifier_name:

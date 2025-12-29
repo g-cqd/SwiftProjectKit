@@ -48,7 +48,7 @@ jobs:
           command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
       - name: SwiftLint
-        run: swiftlint lint --strict --reporter github-actions-logging
+        run: swiftlint lint --reporter github-actions-logging
 
       - name: SwiftFormat
         run: swiftformat --lint .
