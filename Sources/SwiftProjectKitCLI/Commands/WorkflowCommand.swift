@@ -23,7 +23,6 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
 
     enum WorkflowType: String, ExpressibleByArgument, CaseIterable {
         case ci
-        case release
         case all
     }
 
@@ -32,7 +31,7 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
         abstract: "Generate GitHub Actions workflow files",
     )
 
-    @Option(name: .shortAndLong, help: "Workflow type to generate")
+    @Option(name: .shortAndLong, help: "Workflow type to generate (ci includes release)")
     var type: WorkflowType = .ci
 
     @Option(name: .shortAndLong, help: "Project name (auto-detected from Package.swift)")
@@ -43,6 +42,9 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
 
     @Flag(name: .long, help: "macOS only (no platform matrix)")
     var macosOnly = false
+
+    @Flag(name: .long, help: "Exclude release jobs from CI workflow")
+    var noRelease = false
 
     @Flag(name: .long, help: "Overwrite existing workflows")
     var force = false
@@ -71,24 +73,25 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
         // Create workflows directory
         try FileManager.default.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
 
-        switch type {
-        case .ci:
-            try generateCI(at: workflowsDir, name: projectName, platforms: platforms)
-
-        case .release:
-            try generateRelease(at: workflowsDir, name: projectName)
-
-        case .all:
-            try generateCI(at: workflowsDir, name: projectName, platforms: platforms)
-            try generateRelease(at: workflowsDir, name: projectName)
-        }
+        // Generate unified CI/CD workflow
+        try generateCI(
+            at: workflowsDir,
+            name: projectName,
+            platforms: platforms,
+            includeRelease: !noRelease,
+        )
 
         print("\nWorkflow generation complete!")
     }
 
     // MARK: Private
 
-    private func generateCI(at dir: URL, name: String, platforms: PlatformConfiguration) throws {
+    private func generateCI(
+        at dir: URL,
+        name: String,
+        platforms: PlatformConfiguration,
+        includeRelease: Bool,
+    ) throws {
         let path = dir.appendingPathComponent("ci.yml")
 
         if FileManager.default.fileExists(atPath: path.path), !force {
@@ -96,21 +99,17 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
             return
         }
 
-        let workflow = DefaultConfigs.ciWorkflow(name: name, platforms: platforms)
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: name,
+            platforms: platforms,
+            includeRelease: includeRelease,
+        )
         try workflow.write(to: path, atomically: true, encoding: .utf8)
-        print("  Created ci.yml")
-    }
 
-    private func generateRelease(at dir: URL, name: String) throws {
-        let path = dir.appendingPathComponent("release.yml")
-
-        if FileManager.default.fileExists(atPath: path.path), !force {
-            print("  release.yml already exists (use --force to overwrite)")
-            return
+        if includeRelease {
+            print("  Created ci.yml (unified CI/CD with release support)")
+        } else {
+            print("  Created ci.yml (CI only, no release jobs)")
         }
-
-        let workflow = DefaultConfigs.releaseWorkflow(name: name)
-        try workflow.write(to: path, atomically: true, encoding: .utf8)
-        print("  Created release.yml")
     }
 }

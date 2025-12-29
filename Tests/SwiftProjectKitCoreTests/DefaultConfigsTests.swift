@@ -295,73 +295,93 @@ struct CIWorkflowTests {
     }
 }
 
-// MARK: - ReleaseWorkflowTests
+// MARK: - Release Support Tests (Unified CI/CD Workflow)
 
-@Suite("Release Workflow Tests")
-struct ReleaseWorkflowTests {
-    @Test("Release workflow is not empty")
-    func testNotEmpty() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
-        #expect(!workflow.isEmpty)
-    }
+@Suite("Release Support Tests")
+struct ReleaseSupportTests {
+    @Test("Unified workflow with release contains tag triggers")
+    func tagTriggers() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
-    @Test("Release workflow contains correct triggers")
-    func testCorrectTriggers() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
-
-        #expect(workflow.contains("on:"))
-        #expect(workflow.contains("push:"))
         #expect(workflow.contains("tags:"))
         #expect(workflow.contains("'v*'"))
         #expect(workflow.contains("workflow_dispatch:"))
     }
 
-    @Test("Release workflow has validate job")
-    func validateJob() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+    @Test("Unified workflow has validate-release job")
+    func validateReleaseJob() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
-        #expect(workflow.contains("validate:"))
-        #expect(workflow.contains("swift build"))
-        #expect(workflow.contains("swift test"))
+        #expect(workflow.contains("validate-release:"))
+        #expect(workflow.contains("Validate Release"))
     }
 
-    @Test("Release workflow generates changelog")
+    @Test("Unified workflow generates changelog")
     func changelogGeneration() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
         #expect(workflow.contains("changelog:"))
         #expect(workflow.contains("Generate Changelog"))
         #expect(workflow.contains("git log"))
     }
 
-    @Test("Release workflow creates GitHub release")
+    @Test("Unified workflow creates GitHub release")
     func createsGitHubRelease() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
-        #expect(workflow.contains("create-release:"))
+        #expect(workflow.contains("release:"))
+        #expect(workflow.contains("Create Release"))
         #expect(workflow.contains("softprops/action-gh-release"))
         #expect(workflow.contains("GITHUB_TOKEN"))
     }
 
-    @Test("Release workflow uses package name correctly")
+    @Test("Unified workflow uses package name correctly")
     func packageNameUsage() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "MyLibrary")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "MyLibrary",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
         #expect(workflow.contains("MyLibrary"))
         #expect(workflow.contains("g-cqd/MyLibrary"))
     }
 
-    @Test("Release workflow has write permissions")
+    @Test("Unified workflow has write permissions for release")
     func writePermissions() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
         #expect(workflow.contains("permissions:"))
         #expect(workflow.contains("contents: write"))
     }
 
-    @Test("Release workflow supports prerelease detection")
+    @Test("Unified workflow supports prerelease detection")
     func prereleaseDetection() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
         #expect(workflow.contains("prerelease:"))
         #expect(workflow.contains("alpha"))
@@ -369,12 +389,29 @@ struct ReleaseWorkflowTests {
         #expect(workflow.contains("rc"))
     }
 
-    @Test("Release workflow includes installation instructions")
+    @Test("Unified workflow includes installation instructions")
     func installationInstructions() {
-        let workflow = DefaultConfigs.releaseWorkflow(name: "TestPackage")
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+        )
 
         #expect(workflow.contains("## Installation"))
         #expect(workflow.contains("Swift Package Manager"))
         #expect(workflow.contains(".package"))
+    }
+
+    @Test("Workflow without release excludes release jobs")
+    func noReleaseExcludesReleaseJobs() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: false,
+        )
+
+        #expect(!workflow.contains("validate-release:"))
+        #expect(!workflow.contains("changelog:"))
+        #expect(!workflow.contains("Create Release"))
     }
 }

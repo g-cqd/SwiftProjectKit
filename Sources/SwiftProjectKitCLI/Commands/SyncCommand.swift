@@ -113,8 +113,8 @@ struct SyncCommand: AsyncParsableCommand {
         try checkOrCreateSwiftLintConfig(at: projectURL, changes: &changes)
         try checkOrCreateSwiftFormatConfig(at: projectURL, changes: &changes)
         try checkOrCreateClaudeMd(at: projectURL, changes: &changes)
+        // CI workflow includes release support (unified CI/CD)
         try checkOrCreateCIWorkflow(at: projectURL, projectName: projectName, changes: &changes)
-        try checkOrCreateReleaseWorkflow(at: projectURL, projectName: projectName, changes: &changes)
     }
 
     private func checkOrCreateGitignore(at projectURL: URL, changes: inout [String]) throws {
@@ -163,27 +163,12 @@ struct SyncCommand: AsyncParsableCommand {
         changes: inout [String],
     ) throws {
         let filePath = projectURL.appendingPathComponent(".github/workflows/ci.yml")
+        // Unified CI/CD workflow includes release support
         let content = DefaultConfigs.ciWorkflow(name: projectName, platforms: .applePlatforms)
         try checkOrCreateConfigFile(
             at: filePath,
             content: content,
             fileName: ".github/workflows/ci.yml",
-            changes: &changes,
-            createIntermediateDirectories: true,
-        )
-    }
-
-    private func checkOrCreateReleaseWorkflow(
-        at projectURL: URL,
-        projectName: String,
-        changes: inout [String],
-    ) throws {
-        let filePath = projectURL.appendingPathComponent(".github/workflows/release.yml")
-        let content = DefaultConfigs.releaseWorkflow(name: projectName)
-        try checkOrCreateConfigFile(
-            at: filePath,
-            content: content,
-            fileName: ".github/workflows/release.yml",
             changes: &changes,
             createIntermediateDirectories: true,
         )
