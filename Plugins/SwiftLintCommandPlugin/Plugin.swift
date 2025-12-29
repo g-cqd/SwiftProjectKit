@@ -21,11 +21,18 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         let strict = extractor.extractFlag(named: "strict") > 0
         let targetNames = extractor.extractOption(named: "target")
 
-        // Ensure SwiftLint binary is available
-        let swiftlintPath = try await ensureSwiftLint(
-            in: context.pluginWorkDirectoryURL,
-            version: defaultVersion,
-        )
+        // Check for system-installed SwiftLint first
+        let swiftlintPath: URL
+        if let systemPath = findInPath("swiftlint") {
+            print("Using system-installed SwiftLint at \(systemPath.path)")
+            swiftlintPath = systemPath
+        } else {
+            // Download if not available
+            swiftlintPath = try await ensureSwiftLint(
+                in: context.pluginWorkDirectoryURL,
+                version: defaultVersion,
+            )
+        }
 
         // Determine targets to lint
         let targets: [Target] = if targetNames.isEmpty {
@@ -57,7 +64,7 @@ struct SwiftLintCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.57.1"
+    private let defaultVersion = "0.62.0"
 
     private func buildLintArguments(
         fix: Bool,
@@ -219,11 +226,11 @@ struct SwiftLintCommandPlugin: CommandPlugin {
             let binaryDir = workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftlint")
-                .appendingPathComponent("0.57.1")
+                .appendingPathComponent(defaultVersion)
             let binaryPath = binaryDir.appendingPathComponent("swiftlint")
 
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
-                try downloadSwiftLintSync(to: binaryDir, version: "0.57.1")
+                try downloadSwiftLintSync(to: binaryDir, version: defaultVersion)
             }
 
             return binaryPath
@@ -345,6 +352,29 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         }
     }
 #endif
+
+// MARK: - PATH Lookup
+
+/// Find an executable in the system PATH
+private func findInPath(_ executable: String) -> URL? {
+    let searchPaths = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+
+    let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    let allPaths = searchPaths + envPath.split(separator: ":").map(String.init)
+
+    for dir in allPaths {
+        let fullPath = URL(fileURLWithPath: dir).appendingPathComponent(executable)
+        if FileManager.default.isExecutableFile(atPath: fullPath.path) {
+            return fullPath
+        }
+    }
+    return nil
+}
 
 // MARK: - CommandError
 

@@ -21,11 +21,18 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         let verbose = extractor.extractFlag(named: "verbose") > 0
         let targetNames = extractor.extractOption(named: "target")
 
-        // Ensure SwiftFormat binary is available
-        let swiftformatPath = try await ensureSwiftFormat(
-            in: context.pluginWorkDirectoryURL,
-            version: defaultVersion,
-        )
+        // Check for system-installed SwiftFormat first
+        let swiftformatPath: URL
+        if let systemPath = findInPath("swiftformat") {
+            print("Using system-installed SwiftFormat at \(systemPath.path)")
+            swiftformatPath = systemPath
+        } else {
+            // Download if not available
+            swiftformatPath = try await ensureSwiftFormat(
+                in: context.pluginWorkDirectoryURL,
+                version: defaultVersion,
+            )
+        }
 
         // Determine targets to format
         let targets: [Target] = if targetNames.isEmpty {
@@ -58,7 +65,7 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.54.6"
+    private let defaultVersion = "0.58.7"
 
     private func buildFormatArguments(
         lint: Bool,
@@ -218,11 +225,11 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             let binaryDir = workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftformat")
-                .appendingPathComponent("0.54.6")
+                .appendingPathComponent(defaultVersion)
             let binaryPath = binaryDir.appendingPathComponent("swiftformat")
 
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
-                try downloadSwiftFormatSync(to: binaryDir, version: "0.54.6")
+                try downloadSwiftFormatSync(to: binaryDir, version: defaultVersion)
             }
 
             return binaryPath
@@ -343,6 +350,29 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         }
     }
 #endif
+
+// MARK: - PATH Lookup
+
+/// Find an executable in the system PATH
+private func findInPath(_ executable: String) -> URL? {
+    let searchPaths = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+
+    let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    let allPaths = searchPaths + envPath.split(separator: ":").map(String.init)
+
+    for dir in allPaths {
+        let fullPath = URL(fileURLWithPath: dir).appendingPathComponent(executable)
+        if FileManager.default.isExecutableFile(atPath: fullPath.path) {
+            return fullPath
+        }
+    }
+    return nil
+}
 
 // MARK: - CommandError
 

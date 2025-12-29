@@ -3,6 +3,7 @@ import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
 
+// swiftlint:disable type_body_length
 struct InitCommand: AsyncParsableCommand {
     // MARK: Internal
 
@@ -53,25 +54,47 @@ struct InitCommand: AsyncParsableCommand {
 
     // MARK: Private
 
+    // swiftlint:disable:next function_body_length
     private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
 
-        if type == .package {
-            try generatePackageSwift(name: name).write(
+        switch type {
+        case .package:
+            try generatePackageSwift(name: name, isApp: false).write(
                 to: outputURL.appendingPathComponent("Package.swift"),
                 atomically: true,
                 encoding: .utf8,
             )
-        }
 
-        let sourcesDir = outputURL.appendingPathComponent("Sources/\(name)")
-        try fm.createDirectory(at: sourcesDir, withIntermediateDirectories: true)
-        try generateMainFile().write(
-            to: sourcesDir.appendingPathComponent("\(name).swift"),
-            atomically: true,
-            encoding: .utf8,
-        )
+            let sourcesDir = outputURL.appendingPathComponent("Sources/\(name)")
+            try fm.createDirectory(at: sourcesDir, withIntermediateDirectories: true)
+            try generateLibraryFile().write(
+                to: sourcesDir.appendingPathComponent("\(name).swift"),
+                atomically: true,
+                encoding: .utf8,
+            )
+
+        case .app:
+            try generatePackageSwift(name: name, isApp: true).write(
+                to: outputURL.appendingPathComponent("Package.swift"),
+                atomically: true,
+                encoding: .utf8,
+            )
+
+            let sourcesDir = outputURL.appendingPathComponent("Sources/\(name)")
+            try fm.createDirectory(at: sourcesDir, withIntermediateDirectories: true)
+            try generateAppFile().write(
+                to: sourcesDir.appendingPathComponent("\(name)App.swift"),
+                atomically: true,
+                encoding: .utf8,
+            )
+            try generateContentView().write(
+                to: sourcesDir.appendingPathComponent("ContentView.swift"),
+                atomically: true,
+                encoding: .utf8,
+            )
+        }
 
         let testsDir = outputURL.appendingPathComponent("Tests/\(name)Tests")
         try fm.createDirectory(at: testsDir, withIntermediateDirectories: true)
@@ -139,7 +162,7 @@ struct InitCommand: AsyncParsableCommand {
         print("  Created .gitignore")
     }
 
-    private func generateMainFile() -> String {
+    private func generateLibraryFile() -> String {
         """
         // \(name)
         // Created with SwiftProjectKit
@@ -152,13 +175,52 @@ struct InitCommand: AsyncParsableCommand {
         """
     }
 
+    private func generateAppFile() -> String {
+        """
+        // \(name)
+        // Created with SwiftProjectKit
+
+        import SwiftUI
+
+        @main
+        struct \(name)App: App {
+            var body: some Scene {
+                WindowGroup {
+                    ContentView()
+                }
+            }
+        }
+        """
+    }
+
+    private func generateContentView() -> String {
+        """
+        import SwiftUI
+
+        struct ContentView: View {
+            var body: some View {
+                VStack {
+                    Image(systemName: "swift")
+                        .imageScale(.large)
+                        .foregroundStyle(.tint)
+                    Text("Hello, \(name)!")
+                }
+                .padding()
+            }
+        }
+
+        #Preview {
+            ContentView()
+        }
+        """
+    }
+
     private func generateTestFile() -> String {
         """
         import Testing
         @testable import \(name)
 
         @Test func example() {
-            let instance = \(name)()
             #expect(true)
         }
         """
@@ -166,42 +228,75 @@ struct InitCommand: AsyncParsableCommand {
 
     // MARK: - Generators
 
-    private func generatePackageSwift(name: String) -> String {
-        """
-        // swift-tools-version: \(defaultSwiftVersion)
+    // swiftlint:disable:next function_body_length
+    private func generatePackageSwift(name: String, isApp: Bool) -> String {
+        if isApp {
+            """
+            // swift-tools-version: \(defaultSwiftVersion)
 
-        import PackageDescription
+            import PackageDescription
 
-        let package = Package(
-            name: "\(name)",
-            platforms: [
-                .iOS(.v18),
-                .macOS(.v15),
-            ],
-            products: [
-                .library(
-                    name: "\(name)",
-                    targets: ["\(name)"]
-                ),
-            ],
-            dependencies: [
-                .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "1.0.0"),
-            ],
-            targets: [
-                .target(
-                    name: "\(name)",
-                    dependencies: [],
-                    plugins: [
-                        .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
-                    ]
-                ),
-                .testTarget(
-                    name: "\(name)Tests",
-                    dependencies: ["\(name)"]
-                ),
-            ]
-        )
-        """
+            let package = Package(
+                name: "\(name)",
+                platforms: [
+                    .iOS(.v18),
+                    .macOS(.v15),
+                ],
+                dependencies: [
+                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "1.0.0"),
+                ],
+                targets: [
+                    .executableTarget(
+                        name: "\(name)",
+                        dependencies: [],
+                        plugins: [
+                            .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
+                        ]
+                    ),
+                    .testTarget(
+                        name: "\(name)Tests",
+                        dependencies: []
+                    ),
+                ]
+            )
+            """
+        } else {
+            """
+            // swift-tools-version: \(defaultSwiftVersion)
+
+            import PackageDescription
+
+            let package = Package(
+                name: "\(name)",
+                platforms: [
+                    .iOS(.v18),
+                    .macOS(.v15),
+                ],
+                products: [
+                    .library(
+                        name: "\(name)",
+                        targets: ["\(name)"]
+                    ),
+                ],
+                dependencies: [
+                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "1.0.0"),
+                ],
+                targets: [
+                    .target(
+                        name: "\(name)",
+                        dependencies: [],
+                        plugins: [
+                            .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
+                        ]
+                    ),
+                    .testTarget(
+                        name: "\(name)Tests",
+                        dependencies: ["\(name)"]
+                    ),
+                ]
+            )
+            """
+        }
     }
 
     private func generateSwiftLintConfig() -> String {
