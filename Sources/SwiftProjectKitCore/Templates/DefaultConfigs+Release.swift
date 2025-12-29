@@ -1,21 +1,19 @@
 import Foundation
 
-// MARK: - Release Workflow
+// MARK: - Release Workflow (Deprecated)
 
 public extension DefaultConfigs {
+    /// Generates a standalone release workflow.
+    ///
+    /// - Note: This is deprecated. Use `ciWorkflow(name:platforms:includeRelease:)` instead
+    ///   to generate a unified CI/CD workflow with integrated release support.
+    ///
+    /// - Parameter name: The project name
+    /// - Returns: A standalone release workflow YAML string
+    @available(*, deprecated, message: "Use ciWorkflow(name:platforms:includeRelease:) instead")
+    // swiftlint:disable:next function_body_length
     static func releaseWorkflow(name: String) -> String {
-        var workflow = releaseWorkflowHeader()
-        workflow += releaseValidateJob()
-        workflow += releaseChangelogJob()
-        workflow += releaseCreateReleaseJob(name: name)
-        return workflow
-    }
-}
-
-// MARK: - Release Workflow Components
-
-extension DefaultConfigs {
-    static func releaseWorkflowHeader() -> String {
+        // Generate a minimal release-only workflow for backwards compatibility
         """
         name: Release
 
@@ -40,15 +38,12 @@ extension DefaultConfigs {
 
         concurrency:
           group: release-${{ github.ref }}
-          cancel-in-progress: true
+          cancel-in-progress: false
+
+        env:
+          XCODE_VERSION: '\(defaultXcodeVersion)'
 
         jobs:
-        """
-    }
-
-    static func releaseValidateJob() -> String {
-        """
-
           validate:
             name: Validate
             runs-on: macos-15
@@ -78,7 +73,7 @@ extension DefaultConfigs {
                   echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
 
               - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
               - name: Build
                 run: swift build -c release
@@ -86,11 +81,6 @@ extension DefaultConfigs {
               - name: Run Tests
                 run: swift test --parallel
 
-        """
-    }
-
-    static func releaseChangelogJob() -> String {
-        """
           changelog:
             name: Generate Changelog
             runs-on: ubuntu-latest
@@ -125,12 +115,6 @@ extension DefaultConfigs {
                     echo 'EOF'
                   } >> $GITHUB_OUTPUT
 
-        """
-    }
-
-    // swiftlint:disable function_body_length
-    static func releaseCreateReleaseJob(name: String) -> String {
-        """
           create-release:
             name: Create Release
             runs-on: macos-15
@@ -187,5 +171,4 @@ extension DefaultConfigs {
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         """
     }
-    // swiftlint:enable function_body_length
 }

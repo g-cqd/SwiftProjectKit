@@ -258,7 +258,8 @@ struct CIWorkflowTests {
         )
 
         #expect(workflow.contains("concurrency:"))
-        #expect(workflow.contains("cancel-in-progress: true"))
+        // Cancel-in-progress is conditional: only cancels for PRs
+        #expect(workflow.contains("cancel-in-progress: ${{ github.event_name == 'pull_request' }}"))
     }
 
     @Test("CI workflow platform matrix respects configuration")

@@ -1,3 +1,4 @@
+// swiftlint:disable no_print_statements
 import Foundation
 import PackagePlugin
 
@@ -64,12 +65,15 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         configDirectory: URL,
         targets: [Target],
     ) -> [String] {
+        // Build arguments with CI-safe flags
+        // --no-cache: Prevents cache permission errors in CI sandboxes
+        // --force-exclude: Ensures exclusions work when files are passed directly
         var args = fix ? ["lint", "--fix"] : ["lint"]
+        args += ["--no-cache", "--force-exclude"]
         if strict {
             args.append("--strict")
         }
-        args.append("--reporter")
-        args.append("xcode")
+        args += ["--reporter", "xcode"]
 
         if let config = findConfigFile(in: configDirectory) {
             args += ["--config", config.path]
@@ -230,12 +234,13 @@ struct SwiftLintCommandPlugin: CommandPlugin {
             strict: Bool,
             context: XcodePluginContext,
         ) -> [String] {
+            // Build arguments with CI-safe flags
             var args = fix ? ["lint", "--fix"] : ["lint"]
+            args += ["--no-cache", "--force-exclude"]
             if strict {
                 args.append("--strict")
             }
-            args.append("--reporter")
-            args.append("xcode")
+            args += ["--reporter", "xcode"]
 
             if let config = findConfigFile(in: context.xcodeProject.directoryURL) {
                 args += ["--config", config.path]

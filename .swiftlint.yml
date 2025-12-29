@@ -5,6 +5,7 @@ disabled_rules:
   - trailing_comma          # SwiftFormat handles this (--commas always)
   - nesting                 # Too restrictive for complex types
   - opening_brace           # SwiftFormat handles brace placement
+  - blanket_disable_command # CLI commands legitimately need file-wide print statement disables
 
 opt_in_rules:
   # Safety Rules (Critical)
@@ -170,6 +171,10 @@ custom_rules:
     regex: '@unchecked\s+Sendable'
     message: "Use proper Sendable conformance or @preconcurrency import instead of @unchecked Sendable."
     severity: warning
+    excluded:
+      # Justified uses with proper thread-safety documentation:
+      - ".*Protocols\\.swift"      # DefaultFileSystem wraps thread-safe FileManager
+      - ".*MockDependencies\\.swift"  # Test mock with NSLock protection
 
   prefer_file_id:
     name: "Prefer #fileID"

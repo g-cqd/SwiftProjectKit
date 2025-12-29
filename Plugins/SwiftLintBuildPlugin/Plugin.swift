@@ -40,7 +40,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
             return []
         }
 
-        // Build arguments
+        // Build arguments with CI-safe flags
         // --no-cache: Prevents cache permission errors in CI sandboxed environments
         // --force-exclude: Ensures exclusions work even when files are passed directly
         var arguments = ["lint", "--quiet", "--no-cache", "--force-exclude", "--reporter", "xcode"]
@@ -84,6 +84,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
         return nil
     }
 
+    // swiftlint:disable:next function_body_length
     private func ensureSwiftLint(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swiftlint is available in PATH (system-installed via brew/mint)
         if let systemPath = findInPath("swiftlint") {
@@ -154,6 +155,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
     import XcodeProjectPlugin
 
     extension SwiftLintBuildPlugin: XcodeBuildToolPlugin {
+        // swiftlint:disable:next function_body_length
         func createBuildCommands(
             context: XcodePluginContext,
             target: XcodeTarget,
@@ -196,7 +198,7 @@ struct SwiftLintBuildPlugin: BuildToolPlugin {
                 }
             }
 
-            // Build arguments
+            // Build arguments with CI-safe flags
             // --no-cache: Prevents cache permission errors in CI sandboxed environments
             // --force-exclude: Ensures exclusions work even when files are passed directly
             var arguments = ["lint", "--quiet", "--no-cache", "--force-exclude", "--reporter", "xcode"]

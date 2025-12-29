@@ -1,3 +1,4 @@
+// swiftlint:disable no_print_statements type_body_length
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore

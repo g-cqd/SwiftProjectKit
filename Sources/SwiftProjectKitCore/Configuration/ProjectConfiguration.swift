@@ -23,10 +23,10 @@ public struct PlatformConfiguration: Codable, Sendable, Equatable {
     // MARK: Public
 
     /// Default all-platform configuration
-    public static let allPlatforms = PlatformConfiguration()
+    public static let allPlatforms = Self()
 
     /// macOS-only configuration
-    public static let macOSOnly = PlatformConfiguration(
+    public static let macOSOnly = Self(
         iOS: nil,
         macOS: "15.0",
         watchOS: nil,
@@ -35,7 +35,7 @@ public struct PlatformConfiguration: Codable, Sendable, Equatable {
     )
 
     /// Apple platforms (iOS, macOS)
-    public static let applePlatforms = PlatformConfiguration(
+    public static let applePlatforms = Self(
         iOS: "18.0",
         macOS: "15.0",
         watchOS: nil,
@@ -125,7 +125,7 @@ public struct ProjectConfiguration: Codable, Sendable, Equatable {
     // MARK: Public
 
     /// Default configuration
-    public static let `default` = ProjectConfiguration()
+    public static let `default` = Self()
 
     public var version: String
     public var swiftVersion: String
@@ -135,7 +135,7 @@ public struct ProjectConfiguration: Codable, Sendable, Equatable {
     public var workflows: WorkflowConfiguration
 
     /// Load configuration from a directory
-    public static func load(from directory: URL) throws -> ProjectConfiguration {
+    public static func load(from directory: URL) throws -> Self {
         let configPath = directory.appendingPathComponent(".swiftprojectkit.json")
 
         guard FileManager.default.fileExists(atPath: configPath.path) else {
@@ -143,7 +143,7 @@ public struct ProjectConfiguration: Codable, Sendable, Equatable {
         }
 
         let data = try Data(contentsOf: configPath)
-        return try JSONDecoder().decode(ProjectConfiguration.self, from: data)
+        return try JSONDecoder().decode(Self.self, from: data)
     }
 
     /// Save configuration to a directory

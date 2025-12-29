@@ -1,3 +1,4 @@
+// swiftlint:disable no_print_statements
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
@@ -81,6 +82,7 @@ struct InitCommand: AsyncParsableCommand {
         )
     }
 
+    // swiftlint:disable:next function_body_length
     private func createConfigurationFiles(at outputURL: URL) throws {
         let fm = FileManager.default
 

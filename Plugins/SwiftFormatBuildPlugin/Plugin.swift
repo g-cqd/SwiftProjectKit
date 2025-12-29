@@ -82,6 +82,7 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
         return nil
     }
 
+    // swiftlint:disable:next function_body_length
     private func ensureSwiftFormat(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swiftformat is available in PATH (system-installed via brew/mint)
         if let systemPath = findInPath("swiftformat") {
@@ -152,6 +153,7 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
     import XcodeProjectPlugin
 
     extension SwiftFormatBuildPlugin: XcodeBuildToolPlugin {
+        // swiftlint:disable:next function_body_length
         func createBuildCommands(
             context: XcodePluginContext,
             target: XcodeTarget,

@@ -3,7 +3,8 @@ import Foundation
 
 // MARK: - MockFileSystem
 
-/// Mock file system for testing - tracks all operations
+/// Mock file system for testing - tracks all operations.
+/// `@unchecked Sendable` is safe here because all mutable state is protected by `NSLock`.
 final class MockFileSystem: FileSystem, @unchecked Sendable {
     // MARK: Internal
 

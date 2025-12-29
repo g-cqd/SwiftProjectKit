@@ -30,7 +30,8 @@ public protocol FileSystem: Sendable {
 
 // MARK: - DefaultFileSystem
 
-/// Default implementation wrapping FileManager
+/// Default implementation wrapping FileManager.
+/// `@unchecked Sendable` is safe here because `FileManager` is documented to be thread-safe for file operations.
 public final class DefaultFileSystem: FileSystem, @unchecked Sendable {
     // MARK: Lifecycle
 

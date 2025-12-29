@@ -1,3 +1,4 @@
+// swiftlint:disable no_print_statements
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
