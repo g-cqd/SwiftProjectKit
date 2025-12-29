@@ -46,61 +46,80 @@ struct UpdateCommand: AsyncParsableCommand {
         print("Updating project at \(projectURL.path)\(dryRun ? " (dry run)" : "")...")
 
         if updateSwiftlint {
-            let configPath = projectURL.appendingPathComponent(".swiftlint.yml")
-            if dryRun {
-                print("  Would update .swiftlint.yml")
-            } else {
-                try DefaultConfigs.swiftlint.write(to: configPath, atomically: true, encoding: .utf8)
-                print("  Updated .swiftlint.yml")
-            }
+            try updateSwiftLintConfig(at: projectURL)
         }
 
         if updateSwiftformat {
-            let configPath = projectURL.appendingPathComponent(".swiftformat")
-            if dryRun {
-                print("  Would update .swiftformat")
-            } else {
-                try DefaultConfigs.swiftformat.write(to: configPath, atomically: true, encoding: .utf8)
-                print("  Updated .swiftformat")
-            }
+            try updateSwiftFormatConfig(at: projectURL)
         }
 
         if updateClaude {
-            let configPath = projectURL.appendingPathComponent("CLAUDE.md")
-            if dryRun {
-                print("  Would update CLAUDE.md")
-            } else {
-                try DefaultConfigs.claudeMd.write(to: configPath, atomically: true, encoding: .utf8)
-                print("  Updated CLAUDE.md")
-            }
+            try updateClaudeConfig(at: projectURL)
         }
 
         if updateWorkflows {
-            // Try to detect project name from Package.swift or directory name
-            let packageSwiftPath = projectURL.appendingPathComponent("Package.swift")
-            var projectName = projectURL.lastPathComponent
-
-            if FileManager.default.fileExists(atPath: packageSwiftPath.path) {
-                if let content = try? String(contentsOf: packageSwiftPath, encoding: .utf8),
-                   let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression) {
-                    let nameRange = content[match].range(of: #""([^"]+)""#, options: .regularExpression)!
-                    projectName = String(content[nameRange].dropFirst().dropLast())
-                }
-            }
-
-            let workflowsDir = projectURL.appendingPathComponent(".github/workflows")
-            let ciPath = workflowsDir.appendingPathComponent("ci.yml")
-
-            if dryRun {
-                print("  Would update .github/workflows/ci.yml")
-            } else {
-                try FileManager.default.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
-                let workflow = DefaultConfigs.ciWorkflow(name: projectName, platforms: .applePlatforms)
-                try workflow.write(to: ciPath, atomically: true, encoding: .utf8)
-                print("  Updated .github/workflows/ci.yml")
-            }
+            try updateWorkflowsConfig(at: projectURL)
         }
 
         print("\nUpdate complete\(dryRun ? " (dry run)" : "")!")
+    }
+
+    private func updateSwiftLintConfig(at projectURL: URL) throws {
+        let configPath = projectURL.appendingPathComponent(".swiftlint.yml")
+        if dryRun {
+            print("  Would update .swiftlint.yml")
+        } else {
+            try DefaultConfigs.swiftlint.write(to: configPath, atomically: true, encoding: .utf8)
+            print("  Updated .swiftlint.yml")
+        }
+    }
+
+    private func updateSwiftFormatConfig(at projectURL: URL) throws {
+        let configPath = projectURL.appendingPathComponent(".swiftformat")
+        if dryRun {
+            print("  Would update .swiftformat")
+        } else {
+            try DefaultConfigs.swiftformat.write(to: configPath, atomically: true, encoding: .utf8)
+            print("  Updated .swiftformat")
+        }
+    }
+
+    private func updateClaudeConfig(at projectURL: URL) throws {
+        let configPath = projectURL.appendingPathComponent("CLAUDE.md")
+        if dryRun {
+            print("  Would update CLAUDE.md")
+        } else {
+            try DefaultConfigs.claudeMd.write(to: configPath, atomically: true, encoding: .utf8)
+            print("  Updated CLAUDE.md")
+        }
+    }
+
+    private func updateWorkflowsConfig(at projectURL: URL) throws {
+        let projectName = detectProjectName(at: projectURL)
+        let workflowsDir = projectURL.appendingPathComponent(".github/workflows")
+        let ciPath = workflowsDir.appendingPathComponent("ci.yml")
+
+        if dryRun {
+            print("  Would update .github/workflows/ci.yml")
+        } else {
+            try FileManager.default.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
+            let workflow = DefaultConfigs.ciWorkflow(name: projectName, platforms: .applePlatforms)
+            try workflow.write(to: ciPath, atomically: true, encoding: .utf8)
+            print("  Updated .github/workflows/ci.yml")
+        }
+    }
+
+    private func detectProjectName(at projectURL: URL) -> String {
+        let packageSwiftPath = projectURL.appendingPathComponent("Package.swift")
+        var projectName = projectURL.lastPathComponent
+
+        if FileManager.default.fileExists(atPath: packageSwiftPath.path),
+           let content = try? String(contentsOf: packageSwiftPath, encoding: .utf8),
+           let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression),
+           let nameRange = content[match].range(of: #""([^"]+)""#, options: .regularExpression) {
+            projectName = String(content[nameRange].dropFirst().dropLast())
+        }
+
+        return projectName
     }
 }

@@ -39,6 +39,27 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         }
 
         // Build arguments
+        let args = buildLintArguments(
+            fix: fix,
+            strict: strict,
+            configDirectory: context.package.directoryURL,
+            targets: targets,
+        )
+
+        // Run SwiftLint
+        try runSwiftLint(
+            executableURL: swiftlintPath,
+            arguments: args,
+            currentDirectory: context.package.directoryURL,
+        )
+    }
+
+    private func buildLintArguments(
+        fix: Bool,
+        strict: Bool,
+        configDirectory: URL,
+        targets: [Target],
+    ) -> [String] {
         var args = fix ? ["lint", "--fix"] : ["lint"]
         if strict {
             args.append("--strict")
@@ -46,23 +67,27 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         args.append("--reporter")
         args.append("xcode")
 
-        // Find config
-        if let config = findConfigFile(in: context.package.directoryURL) {
+        if let config = findConfigFile(in: configDirectory) {
             args += ["--config", config.path]
         }
 
-        // Add source directories
         for target in targets {
             if let sourceTarget = target as? SourceModuleTarget {
                 args.append(sourceTarget.directoryURL.path)
             }
         }
+        return args
+    }
 
-        // Run SwiftLint
+    private func runSwiftLint(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectory: URL,
+    ) throws {
         let process = Process()
-        process.executableURL = swiftlintPath
-        process.arguments = args
-        process.currentDirectoryURL = context.package.directoryURL
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -72,7 +97,6 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         try process.run()
         process.waitUntilExit()
 
-        // Output results
         let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
@@ -173,8 +197,22 @@ struct SwiftLintCommandPlugin: CommandPlugin {
             let fix = extractor.extractFlag(named: "fix") > 0
             let strict = extractor.extractFlag(named: "strict") > 0
 
-            // Check for binary
-            let binaryDir = context.pluginWorkDirectoryURL
+            let binaryPath = try ensureSwiftLintBinary(in: context.pluginWorkDirectoryURL)
+            let args = buildXcodeArguments(
+                fix: fix,
+                strict: strict,
+                context: context,
+            )
+
+            try runSwiftLintProcess(
+                executableURL: binaryPath,
+                arguments: args,
+                currentDirectory: context.xcodeProject.directoryURL,
+            )
+        }
+
+        private func ensureSwiftLintBinary(in workDirectory: URL) throws -> URL {
+            let binaryDir = workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftlint")
                 .appendingPathComponent("0.57.1")
@@ -184,6 +222,14 @@ struct SwiftLintCommandPlugin: CommandPlugin {
                 try downloadSwiftLintSync(to: binaryDir, version: "0.57.1")
             }
 
+            return binaryPath
+        }
+
+        private func buildXcodeArguments(
+            fix: Bool,
+            strict: Bool,
+            context: XcodePluginContext,
+        ) -> [String] {
             var args = fix ? ["lint", "--fix"] : ["lint"]
             if strict {
                 args.append("--strict")
@@ -195,18 +241,24 @@ struct SwiftLintCommandPlugin: CommandPlugin {
                 args += ["--config", config.path]
             }
 
-            // Add all Swift files from all targets
             let swiftFiles = context.xcodeProject.targets
                 .flatMap(\.inputFiles)
                 .filter { $0.url.pathExtension == "swift" }
                 .map(\.url.path)
 
             args += swiftFiles
+            return args
+        }
 
+        private func runSwiftLintProcess(
+            executableURL: URL,
+            arguments: [String],
+            currentDirectory: URL,
+        ) throws {
             let process = Process()
-            process.executableURL = binaryPath
-            process.arguments = args
-            process.currentDirectoryURL = context.xcodeProject.directoryURL
+            process.executableURL = executableURL
+            process.arguments = arguments
+            process.currentDirectoryURL = currentDirectory
 
             let outputPipe = Pipe()
             let errorPipe = Pipe()
@@ -216,8 +268,14 @@ struct SwiftLintCommandPlugin: CommandPlugin {
             try process.run()
             process.waitUntilExit()
 
-            let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let output = String(
+                data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8,
+            ) ?? ""
+            let errors = String(
+                data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8,
+            ) ?? ""
 
             if !output.isEmpty { print(output) }
             if !errors.isEmpty { Diagnostics.error(errors) }

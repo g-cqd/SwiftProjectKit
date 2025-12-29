@@ -39,6 +39,28 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         }
 
         // Build arguments
+        let args = buildFormatArguments(
+            lint: lint,
+            verbose: verbose,
+            configDirectory: context.package.directoryURL,
+            targets: targets,
+        )
+
+        // Run SwiftFormat
+        try runSwiftFormat(
+            executableURL: swiftformatPath,
+            arguments: args,
+            currentDirectory: context.package.directoryURL,
+            isLintMode: lint,
+        )
+    }
+
+    private func buildFormatArguments(
+        lint: Bool,
+        verbose: Bool,
+        configDirectory: URL,
+        targets: [Target],
+    ) -> [String] {
         var args: [String] = []
         if lint {
             args.append("--lint")
@@ -47,23 +69,28 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             args.append("--verbose")
         }
 
-        // Find config
-        if let config = findConfigFile(in: context.package.directoryURL) {
+        if let config = findConfigFile(in: configDirectory) {
             args += ["--config", config.path]
         }
 
-        // Add source directories
         for target in targets {
             if let sourceTarget = target as? SourceModuleTarget {
                 args.append(sourceTarget.directoryURL.path)
             }
         }
+        return args
+    }
 
-        // Run SwiftFormat
+    private func runSwiftFormat(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectory: URL,
+        isLintMode: Bool,
+    ) throws {
         let process = Process()
-        process.executableURL = swiftformatPath
-        process.arguments = args
-        process.currentDirectoryURL = context.package.directoryURL
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -73,7 +100,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         try process.run()
         process.waitUntilExit()
 
-        // Output results
         let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
@@ -88,7 +114,7 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             throw CommandError.formattingFailed(exitCode: process.terminationStatus)
         }
 
-        let action = lint ? "checked" : "formatted"
+        let action = isLintMode ? "checked" : "formatted"
         print("SwiftFormat \(action) successfully")
     }
 
@@ -172,8 +198,23 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             let lint = extractor.extractFlag(named: "lint") > 0
             let verbose = extractor.extractFlag(named: "verbose") > 0
 
-            // Check for binary
-            let binaryDir = context.pluginWorkDirectoryURL
+            let binaryPath = try ensureSwiftFormatBinary(in: context.pluginWorkDirectoryURL)
+            let args = buildXcodeArguments(
+                lint: lint,
+                verbose: verbose,
+                context: context,
+            )
+
+            try runSwiftFormatProcess(
+                executableURL: binaryPath,
+                arguments: args,
+                currentDirectory: context.xcodeProject.directoryURL,
+                isLintMode: lint,
+            )
+        }
+
+        private func ensureSwiftFormatBinary(in workDirectory: URL) throws -> URL {
+            let binaryDir = workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swiftformat")
                 .appendingPathComponent("0.54.6")
@@ -183,6 +224,14 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
                 try downloadSwiftFormatSync(to: binaryDir, version: "0.54.6")
             }
 
+            return binaryPath
+        }
+
+        private func buildXcodeArguments(
+            lint: Bool,
+            verbose: Bool,
+            context: XcodePluginContext,
+        ) -> [String] {
             var args: [String] = []
             if lint {
                 args.append("--lint")
@@ -195,18 +244,25 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
                 args += ["--config", config.path]
             }
 
-            // Add all Swift files from all targets
             let swiftFiles = context.xcodeProject.targets
                 .flatMap(\.inputFiles)
                 .filter { $0.url.pathExtension == "swift" }
                 .map(\.url.path)
 
             args += swiftFiles
+            return args
+        }
 
+        private func runSwiftFormatProcess(
+            executableURL: URL,
+            arguments: [String],
+            currentDirectory: URL,
+            isLintMode: Bool,
+        ) throws {
             let process = Process()
-            process.executableURL = binaryPath
-            process.arguments = args
-            process.currentDirectoryURL = context.xcodeProject.directoryURL
+            process.executableURL = executableURL
+            process.arguments = arguments
+            process.currentDirectoryURL = currentDirectory
 
             let outputPipe = Pipe()
             let errorPipe = Pipe()
@@ -216,8 +272,14 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             try process.run()
             process.waitUntilExit()
 
-            let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            let output = String(
+                data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8,
+            ) ?? ""
+            let errors = String(
+                data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8,
+            ) ?? ""
 
             if !output.isEmpty { print(output) }
             if !errors.isEmpty { Diagnostics.error(errors) }
@@ -226,7 +288,7 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
                 throw CommandError.formattingFailed(exitCode: process.terminationStatus)
             }
 
-            let action = lint ? "checked" : "formatted"
+            let action = isLintMode ? "checked" : "formatted"
             print("SwiftFormat \(action) successfully")
         }
 
