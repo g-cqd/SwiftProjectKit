@@ -75,7 +75,6 @@ struct SWABuildPlugin: BuildToolPlugin {
 
     // MARK: - Private Helpers
 
-    // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH (system-installed)
         if let systemPath = findInPath("swa") {
@@ -122,7 +121,7 @@ struct SWABuildPlugin: BuildToolPlugin {
         // Create directory
         try FileManager.default.createDirectory(at: binaryDir, withIntermediateDirectories: true)
 
-        // Extract tar.gz (different from SwiftLint's zip)
+        // Extract tar.gz archive
         let tarProcess = Process()
         tarProcess.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
         tarProcess.arguments = ["xzf", localURL.path, "-C", binaryDir.path]
@@ -161,7 +160,6 @@ struct SWABuildPlugin: BuildToolPlugin {
     import XcodeProjectPlugin
 
     extension SWABuildPlugin: XcodeBuildToolPlugin {
-        // swiftlint:disable:next function_body_length
         func createBuildCommands(
             context: XcodePluginContext,
             target: XcodeTarget,

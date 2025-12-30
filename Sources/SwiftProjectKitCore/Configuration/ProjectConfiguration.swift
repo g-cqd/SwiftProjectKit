@@ -110,14 +110,12 @@ public struct ProjectConfiguration: Codable, Sendable, Equatable {
         version: String = "1.0",
         swiftVersion: String = "6.2",
         platforms: PlatformConfiguration = .allPlatforms,
-        swiftlint: ToolConfiguration = .init(),
         swiftformat: ToolConfiguration = .init(),
         workflows: WorkflowConfiguration = .init(),
     ) {
         self.version = version
         self.swiftVersion = swiftVersion
         self.platforms = platforms
-        self.swiftlint = swiftlint
         self.swiftformat = swiftformat
         self.workflows = workflows
     }
@@ -130,7 +128,7 @@ public struct ProjectConfiguration: Codable, Sendable, Equatable {
     public var version: String
     public var swiftVersion: String
     public var platforms: PlatformConfiguration
-    public var swiftlint: ToolConfiguration
+    /// swift-format configuration
     public var swiftformat: ToolConfiguration
     public var workflows: WorkflowConfiguration
 

@@ -1,4 +1,3 @@
-// swiftlint:disable no_print_statements
 import Foundation
 import PackagePlugin
 
@@ -160,7 +159,6 @@ struct DuplicationCommandPlugin: CommandPlugin {
         print("\(analysisName) completed successfully")
     }
 
-    // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH
         if let systemPath = findInPath("swa") {

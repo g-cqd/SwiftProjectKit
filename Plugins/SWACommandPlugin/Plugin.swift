@@ -1,4 +1,3 @@
-// swiftlint:disable no_print_statements
 import Foundation
 import PackagePlugin
 

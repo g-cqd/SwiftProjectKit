@@ -1,8 +1,7 @@
 // MARK: - Import Sorting Test Fixtures
-// Tests: SwiftFormat `sortedImports` vs SwiftLint `sorted_imports`
+// Tests: swift-format `OrderedImports` rule
 //
-// Run: swiftformat --lint ImportSortingTests.swift
-// Run: swiftlint lint ImportSortingTests.swift
+// Run: xcrun swift-format lint --strict ImportSortingTests.swift
 
 // MARK: - Test Case 1: Unsorted Imports (BAD)
 
@@ -13,19 +12,19 @@
 // import SwiftUI
 // @testable import MyModule
 
-// MARK: - Test Case 2: Alphabetically Sorted (GOOD for SwiftLint)
+// MARK: - Test Case 2: Alphabetically Sorted (GOOD)
 
-// GOOD for SwiftLint (pure alphabetical)
+// GOOD: Pure alphabetical sorting
 // import Combine
 // import Foundation
 // import SwiftUI
 // import UIKit
 // @testable import MyModule
 
-// MARK: - Test Case 3: Grouped Imports (GOOD for SwiftFormat with grouping)
+// MARK: - Test Case 3: Grouped Imports (GOOD for swift-format)
 
-// GOOD for SwiftFormat (--importgrouping testable-last)
-// Groups: System frameworks, then @testable imports last
+// GOOD for swift-format (OrderedImports rule)
+// Groups: System frameworks alphabetically, then @testable imports last
 import Combine
 import Foundation
 import SwiftUI
@@ -33,36 +32,21 @@ import UIKit
 
 @testable import SwiftProjectKit
 
-// MARK: - Test Case 4: Case Sensitivity Issue
+// MARK: - Test Case 4: Case Sensitivity
 
-// SwiftLint sorts case-sensitively by default (A before a)
-// This can cause issues with imports like:
+// swift-format handles case-sensitive sorting correctly:
 // import ACL
 // import AVFoundation
 // import Accessibility
 
-// MARK: - Potential Conflict Analysis
+// MARK: - Configuration
 //
-// SwiftFormat `--importgrouping testable-last`:
-// 1. Standard imports (alphabetical)
-// 2. @testable imports (alphabetical, at end)
-//
-// SwiftLint `sorted_imports`:
-// - Expects ALL imports in one alphabetical block
-// - Does NOT understand grouping
-// - May warn about @testable imports being "out of order"
+// swift-format `OrderedImports` rule:
+// - Sorts imports alphabetically
+// - Handles @testable imports appropriately
 //
 // RECOMMENDATION:
-// Option A: Disable `sorted_imports` in SwiftLint (let SwiftFormat handle it)
-// Option B: Use `--importgrouping alpha` in SwiftFormat (no grouping)
-//
-// Current Config Analysis:
-// - SwiftFormat: `--importgrouping testable-last` (groups imports)
-// - SwiftLint: `sorted_imports` in opt_in_rules (enabled)
-//
-// POTENTIAL CONFLICT: SwiftLint may warn about @testable imports
-// being after regular imports even though SwiftFormat intentionally
-// places them there.
+// Enable OrderedImports in .swift-format configuration
 
 enum ImportSortingTests {
     static func example() {

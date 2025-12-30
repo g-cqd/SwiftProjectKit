@@ -71,7 +71,6 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
 
     private let defaultVersion = "0.0.6"
 
-    // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH (system-installed)
         if let systemPath = findInPath("swa") {

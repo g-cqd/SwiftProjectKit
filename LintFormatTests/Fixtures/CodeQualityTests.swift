@@ -1,8 +1,7 @@
 // MARK: - Code Quality Test Fixtures
 // Tests rules for code elegance, readability, and best practices
 //
-// Run: swiftformat --lint CodeQualityTests.swift
-// Run: swiftlint lint CodeQualityTests.swift
+// Run: xcrun swift-format lint --strict CodeQualityTests.swift
 
 import Foundation
 
@@ -12,7 +11,7 @@ enum EmptyCollectionTests {
 
     // BAD: Using count == 0
     static func badCountCheck(_ array: [Int]) -> Bool {
-        array.count == 0  // swiftlint:disable:this empty_count
+        array.count == 0
     }
 
     // GOOD: Using isEmpty
@@ -22,7 +21,7 @@ enum EmptyCollectionTests {
 
     // BAD: Using count > 0
     static func badNotEmptyCheck(_ array: [Int]) -> Bool {
-        array.count > 0  // swiftlint:disable:this empty_count
+        array.count > 0
     }
 
     // GOOD: Using !isEmpty
@@ -37,7 +36,7 @@ enum FirstLastWhereTests {
 
     // BAD: filter().first
     static func badFilterFirst(_ numbers: [Int]) -> Int? {
-        numbers.filter { $0 > 5 }.first  // swiftlint:disable:this first_where
+        numbers.filter { $0 > 5 }.first
     }
 
     // GOOD: first(where:)
@@ -47,7 +46,7 @@ enum FirstLastWhereTests {
 
     // BAD: filter().last
     static func badFilterLast(_ numbers: [Int]) -> Int? {
-        numbers.filter { $0 > 5 }.last  // swiftlint:disable:this last_where
+        numbers.filter { $0 > 5 }.last
     }
 
     // GOOD: last(where:)
@@ -62,7 +61,6 @@ enum ReduceIntoTests {
 
     // BAD: reduce with copy
     static func badReduce(_ strings: [String]) -> [String: Int] {
-        // swiftlint:disable:next reduce_into
         strings.reduce([:]) { result, string in
             var dict = result
             dict[string] = string.count
@@ -86,7 +84,7 @@ enum ToggleBoolTests {
 
     // BAD: Manual negation
     static func badToggle() {
-        flag = !flag  // swiftlint:disable:this toggle_bool
+        flag = !flag
     }
 
     // GOOD: Using toggle()
@@ -101,7 +99,7 @@ enum SortedFirstLastTests {
 
     // BAD: sorted().first
     static func badSortedFirst(_ numbers: [Int]) -> Int? {
-        numbers.sorted().first  // swiftlint:disable:this sorted_first_last
+        numbers.sorted().first
     }
 
     // GOOD: min()
@@ -111,7 +109,7 @@ enum SortedFirstLastTests {
 
     // BAD: sorted().last
     static func badSortedLast(_ numbers: [Int]) -> Int? {
-        numbers.sorted().last  // swiftlint:disable:this sorted_first_last
+        numbers.sorted().last
     }
 
     // GOOD: max()
@@ -126,7 +124,7 @@ enum RedundantNilCoalescingTests {
 
     // BAD: Nil coalescing with nil
     static func badNilCoalescing(_ value: String?) -> String? {
-        value ?? nil  // swiftlint:disable:this redundant_nil_coalescing
+        value ?? nil
     }
 
     // GOOD: Just use the optional
@@ -161,7 +159,7 @@ enum YodaConditionTests {
 
     // BAD: Yoda condition (constant on left)
     static func badYoda(_ value: Int) -> Bool {
-        5 == value  // swiftlint:disable:this yoda_condition
+        5 == value
     }
 
     // GOOD: Variable on left
@@ -175,7 +173,6 @@ enum YodaConditionTests {
 enum OptionalBoolTests {
 
     // BAD: Optional Bool is confusing (true, false, or nil?)
-    // swiftlint:disable:next discouraged_optional_boolean
     static func badOptionalBool() -> Bool? {
         nil
     }
@@ -194,10 +191,11 @@ enum OptionalBoolTests {
 
 // MARK: - Expected Behavior
 //
-// SwiftLint will warn on all BAD examples above.
-// SwiftFormat can fix some (like isEmpty), but not semantic issues.
+// swift-format focuses on formatting consistency.
+// For semantic code quality rules (like isEmpty, first(where:), etc.),
+// consider using additional static analysis tools or code review.
 //
 // RECOMMENDATION:
-// 1. Keep all these opt-in rules ENABLED
-// 2. These improve code quality and performance
-// 3. Most are easy to fix and understand
+// 1. Use swift-format for consistent formatting
+// 2. Enable UseEarlyExits rule for guard statements
+// 3. Apply code quality improvements during code review

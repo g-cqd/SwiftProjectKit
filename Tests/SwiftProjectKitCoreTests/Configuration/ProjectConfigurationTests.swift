@@ -42,22 +42,15 @@ struct ProjectConfigurationTests {
 
         #expect(
             config.platforms == .allPlatforms,
-            "Default should include all platforms",
+            "Default should include all platforms"
         )
     }
 
-    @Test("Default initialization enables SwiftLint")
-    func defaultEnablesSwiftLint() {
-        let config = ProjectConfiguration()
-
-        #expect(config.swiftlint.enabled == true, "SwiftLint should be enabled")
-    }
-
-    @Test("Default initialization enables SwiftFormat")
+    @Test("Default initialization enables swift-format")
     func defaultEnablesSwiftFormat() {
         let config = ProjectConfiguration()
 
-        #expect(config.swiftformat.enabled == true, "SwiftFormat should be enabled")
+        #expect(config.swiftformat.enabled == true, "swift-format should be enabled")
     }
 
     @Test("Default initialization enables CI workflow")
@@ -85,17 +78,15 @@ struct ProjectConfigurationTests {
             version: "2.0",
             swiftVersion: "5.9",
             platforms: .macOSOnly,
-            swiftlint: ToolConfiguration(enabled: false),
-            swiftformat: ToolConfiguration(enabled: true, version: "0.54.0"),
-            workflows: WorkflowConfiguration(ci: true, release: false, docs: false),
+            swiftformat: ToolConfiguration(enabled: true, version: "600.0.0"),
+            workflows: WorkflowConfiguration(ci: true, release: false, docs: false)
         )
 
         #expect(config.version == "2.0")
         #expect(config.swiftVersion == "5.9")
         #expect(config.platforms == .macOSOnly)
-        #expect(config.swiftlint.enabled == false)
         #expect(config.swiftformat.enabled == true)
-        #expect(config.swiftformat.version == "0.54.0")
+        #expect(config.swiftformat.version == "600.0.0")
         #expect(config.workflows.release == false)
     }
 
@@ -111,11 +102,10 @@ struct ProjectConfigurationTests {
                 macOS: "14.0",
                 watchOS: nil,
                 tvOS: nil,
-                visionOS: nil,
+                visionOS: nil
             ),
-            swiftlint: ToolConfiguration(enabled: true, version: "0.57.0"),
-            swiftformat: ToolConfiguration(enabled: false),
-            workflows: WorkflowConfiguration(ci: true, release: true, docs: false),
+            swiftformat: ToolConfiguration(enabled: true, version: "600.0.0"),
+            workflows: WorkflowConfiguration(ci: true, release: true, docs: false)
         )
 
         let encoder = JSONEncoder()
@@ -175,7 +165,7 @@ struct ProjectConfigurationTests {
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(
             at: tempDir,
-            withIntermediateDirectories: true,
+            withIntermediateDirectories: true
         )
 
         defer {
@@ -186,9 +176,8 @@ struct ProjectConfigurationTests {
             version: "1.5",
             swiftVersion: "6.1",
             platforms: .applePlatforms,
-            swiftlint: ToolConfiguration(enabled: true, version: "0.57.1"),
-            swiftformat: ToolConfiguration(enabled: true, version: "0.54.6"),
-            workflows: WorkflowConfiguration(ci: true, release: true, docs: false),
+            swiftformat: ToolConfiguration(enabled: true, version: "600.0.0"),
+            workflows: WorkflowConfiguration(ci: true, release: true, docs: false)
         )
 
         try original.save(to: tempDir)
@@ -204,7 +193,7 @@ struct ProjectConfigurationTests {
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(
             at: tempDir,
-            withIntermediateDirectories: true,
+            withIntermediateDirectories: true
         )
 
         defer {
@@ -222,7 +211,7 @@ struct ProjectConfigurationTests {
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(
             at: tempDir,
-            withIntermediateDirectories: true,
+            withIntermediateDirectories: true
         )
 
         defer {
@@ -235,7 +224,7 @@ struct ProjectConfigurationTests {
         let expectedPath = tempDir.appendingPathComponent(".swiftprojectkit.json")
         #expect(
             FileManager.default.fileExists(atPath: expectedPath.path),
-            "Should create .swiftprojectkit.json",
+            "Should create .swiftprojectkit.json"
         )
     }
 
@@ -254,7 +243,6 @@ struct ProjectConfigurationTests {
         #expect(jsonString?.contains("\"version\"") == true)
         #expect(jsonString?.contains("\"swiftVersion\"") == true)
         #expect(jsonString?.contains("\"platforms\"") == true)
-        #expect(jsonString?.contains("\"swiftlint\"") == true)
         #expect(jsonString?.contains("\"swiftformat\"") == true)
         #expect(jsonString?.contains("\"workflows\"") == true)
     }
@@ -270,5 +258,41 @@ struct ProjectConfigurationTests {
 
         let newlineCount = jsonString.count { $0 == "\n" }
         #expect(newlineCount > 10, "Pretty-printed JSON should have multiple newlines")
+    }
+
+    @Test("Encoded JSON has expected keys")
+    func encodedJsonHasExpectedKeys() throws {
+        let config = ProjectConfiguration.default
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(config)
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            Issue.record("Failed to parse JSON")
+            return
+        }
+
+        #expect(json["version"] != nil)
+        #expect(json["swiftVersion"] != nil)
+        #expect(json["platforms"] != nil)
+        #expect(json["swiftformat"] != nil)
+        #expect(json["workflows"] != nil)
+    }
+
+    @Test("All parameters can be set together")
+    func allParametersCanBeSetTogether() {
+        let config = ProjectConfiguration(
+            version: "3.0",
+            swiftVersion: "7.0",
+            platforms: .macOSOnly,
+            swiftformat: ToolConfiguration(enabled: false, version: nil, configPath: ".custom-swift-format"),
+            workflows: WorkflowConfiguration(ci: false, release: false, docs: false)
+        )
+
+        #expect(config.version == "3.0")
+        #expect(config.swiftVersion == "7.0")
+        #expect(config.platforms == .macOSOnly)
+        #expect(config.swiftformat.enabled == false)
+        #expect(config.swiftformat.configPath == ".custom-swift-format")
+        #expect(config.workflows.ci == false)
     }
 }

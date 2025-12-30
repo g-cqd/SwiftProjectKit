@@ -1,14 +1,13 @@
 // MARK: - Modifier Order Test Fixtures
-// Tests: SwiftFormat `modifierOrder` vs SwiftLint `modifier_order`
+// Tests: swift-format modifier ordering
 //
-// Run: swiftformat --lint ModifierOrderTests.swift
-// Run: swiftlint lint ModifierOrderTests.swift
+// Run: xcrun swift-format lint --strict ModifierOrderTests.swift
 
 import Foundation
 
 // MARK: - Test Case 1: Correct Modifier Order
 
-// GOOD: Correct order per SwiftLint/SwiftFormat defaults
+// GOOD: Correct order per swift-format defaults
 // Order: override, access control, @attributes, static/class, mutating, final
 final class CorrectOrderExample {
 
@@ -62,15 +61,11 @@ class ConformingClass: ModifierTestProtocol {
 
 // MARK: - Expected Behavior
 //
-// SwiftFormat `modifierOrder` (default, enabled):
-// - Will REORDER badOrder1 to: `public static let`
-// - Will REORDER badOrder2 to: `private final func`
+// swift-format will:
+// - REORDER badOrder1 to: `public static let`
+// - REORDER badOrder2 to: `private final func`
 //
-// SwiftLint `modifier_order` (opt_in, enabled):
-// - Will WARN about badOrder1 and badOrder2
-// - Can autocorrect with: swiftlint lint --fix
-//
-// Default Order (both tools aligned since SwiftFormat 0.44.8):
+// Default Order:
 // 1. override
 // 2. Access control (private, fileprivate, internal, public, open)
 // 3. @attributes (@MainActor, @available, etc.)
@@ -80,8 +75,7 @@ class ConformingClass: ModifierTestProtocol {
 // 7. lazy
 // 8. var / let / func / etc.
 //
-// RECOMMENDATION: Both tools are aligned. No changes needed.
-// Use SwiftFormat to fix, SwiftLint to warn on CI.
+// RECOMMENDATION: Let swift-format handle modifier ordering automatically.
 
 enum ModifierOrderTests {
     static func runTests() {

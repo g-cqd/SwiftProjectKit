@@ -1,8 +1,7 @@
 // MARK: - Trailing Comma Test Fixtures
-// Tests: SwiftFormat `trailingCommas` vs SwiftLint `trailing_comma`
+// Tests: swift-format `multiElementCollectionTrailingCommas`
 //
-// Run: swiftformat --lint TrailingCommaTests.swift
-// Run: swiftlint lint TrailingCommaTests.swift
+// Run: xcrun swift-format lint --strict TrailingCommaTests.swift
 
 import Foundation
 
@@ -85,14 +84,8 @@ enum TrailingCommaTests {
 
 // MARK: - Expected Results
 //
-// SwiftFormat (--commas always):
-// - Will ADD trailing commas to colorsBad, configBad, createUserBad
-// - Will REMOVE trailing comma from singleLineBad (only on single lines with specific config)
+// swift-format (multiElementCollectionTrailingCommas: true):
+// - Will ADD trailing commas to multiline collections
+// - Will format colorsBad, configBad, createUserBad to have trailing commas
 //
-// SwiftLint (trailing_comma disabled):
-// - Will NOT warn about any of these (rule is disabled)
-//
-// If SwiftLint trailing_comma were enabled with mandatory_comma: true:
-// - Would WARN on colorsBad, configBad (missing comma)
-//
-// RECOMMENDATION: Keep SwiftLint trailing_comma disabled, let SwiftFormat handle it
+// RECOMMENDATION: Enable multiElementCollectionTrailingCommas in .swift-format

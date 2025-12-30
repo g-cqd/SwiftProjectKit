@@ -1,86 +1,30 @@
-# SwiftFormat & SwiftLint Test Suite
+# swift-format Test Fixtures
 
-A comprehensive test suite for evaluating and refining SwiftFormat and SwiftLint configurations.
+Test fixtures for validating apple/swift-format rules and configurations.
 
 ## Directory Structure
 
 ```
 LintFormatTests/
-├── README.md                    # This file
-├── Configs/                     # Proposed configuration files
-│   ├── proposed.swiftformat     # Refined SwiftFormat config
-│   └── proposed.swiftlint.yml   # Refined SwiftLint config
-├── Documentation/               # Analysis and planning documents
-│   ├── CONFLICT_ANALYSIS.md     # Rule conflict analysis
-│   └── REFINEMENT_PLAN.md       # Step-by-step improvement plan
-├── Fixtures/                    # Test Swift files
-│   ├── TrailingCommaTests.swift # Trailing comma scenarios
-│   ├── ImportSortingTests.swift # Import sorting scenarios
-│   ├── ModifierOrderTests.swift # Modifier order scenarios
-│   ├── SafetyRulesTests.swift   # Safety rule scenarios
-│   ├── CodeQualityTests.swift   # Code quality scenarios
-│   └── Swift6ConcurrencyTests.swift # Swift 6 concurrency
-└── Scripts/                     # Test automation
-    └── run_tests.sh             # Run all tests
+├── README.md                       # This file
+├── Fixtures/                       # Test Swift files
+│   ├── TrailingCommaTests.swift    # Trailing comma scenarios
+│   ├── SafetyRulesTests.swift      # Safety rule scenarios (force unwrap, etc.)
+│   ├── CodeQualityTests.swift      # Code quality scenarios
+│   └── Swift6ConcurrencyTests.swift # Swift 6 concurrency patterns
+└── Scripts/
+    └── run_tests.sh                # Run format checks
 ```
 
-## Quick Start
-
-### 1. Run Tests
+## Running Format Checks
 
 ```bash
-# Run both tools against all fixtures
-./LintFormatTests/Scripts/run_tests.sh
+# Check formatting on fixtures
+xcrun swift-format lint --strict --recursive LintFormatTests/Fixtures/
 
-# Or manually:
-swiftformat --lint LintFormatTests/Fixtures/
-swiftlint lint LintFormatTests/Fixtures/
+# Format fixtures
+xcrun swift-format format --in-place --recursive LintFormatTests/Fixtures/
 ```
-
-### 2. Review Conflicts
-
-See [Documentation/CONFLICT_ANALYSIS.md](Documentation/CONFLICT_ANALYSIS.md) for:
-- Known rule conflicts
-- Overlapping rules
-- SwiftLint-only rules
-- SwiftFormat-only rules
-
-### 3. Apply Proposed Configs
-
-```bash
-# Backup current configs
-cp .swiftformat .swiftformat.backup
-cp .swiftlint.yml .swiftlint.yml.backup
-
-# Apply proposed configs
-cp LintFormatTests/Configs/proposed.swiftformat .swiftformat
-cp LintFormatTests/Configs/proposed.swiftlint.yml .swiftlint.yml
-
-# Test on codebase
-swiftformat --lint Sources/
-swiftlint lint Sources/
-```
-
-## Key Findings
-
-### Resolved Conflicts
-
-| Conflict | Resolution |
-|----------|------------|
-| Trailing comma | SwiftFormat handles it, SwiftLint disabled |
-| Import sorting | SwiftFormat handles grouping, SwiftLint disabled |
-| Modifier order | Both aligned since SwiftFormat 0.44.8 |
-| Brace wrapping | SwiftFormat's `wrapMultilineStatementBraces` disabled |
-
-### Recommended Workflow
-
-```
-Write Code → Build (SwiftLint warnings) → Pre-commit (SwiftFormat) → CI (Both)
-```
-
-1. **During development**: SwiftLint shows warnings in Xcode
-2. **On commit**: SwiftFormat auto-fixes formatting
-3. **On CI**: Both tools validate (SwiftFormat `--lint`, SwiftLint)
 
 ## Fixture Files
 
@@ -88,16 +32,27 @@ Each fixture demonstrates specific rules:
 
 | File | Tests |
 |------|-------|
-| `TrailingCommaTests.swift` | `--commas always` vs `trailing_comma` |
-| `ImportSortingTests.swift` | `--importgrouping` vs `sorted_imports` |
-| `ModifierOrderTests.swift` | `modifierOrder` vs `modifier_order` |
-| `SafetyRulesTests.swift` | `force_unwrapping`, `force_cast`, etc. |
-| `CodeQualityTests.swift` | `isEmpty`, `first_where`, `reduce_into`, etc. |
-| `Swift6ConcurrencyTests.swift` | Actors, Sendable, async/await |
+| `TrailingCommaTests.swift` | `multiElementCollectionTrailingCommas` |
+| `SafetyRulesTests.swift` | `NeverForceUnwrap`, `NeverUseForceTry`, `NeverUseImplicitlyUnwrappedOptionals` |
+| `CodeQualityTests.swift` | `UseEarlyExits`, `OrderedImports`, etc. |
+| `Swift6ConcurrencyTests.swift` | Actors, Sendable, async/await patterns |
+
+## Configuration
+
+The project uses `.swift-format` (JSON) at the repository root. Key rules enabled:
+
+- `NeverForceUnwrap` - Prevents force unwrapping
+- `NeverUseForceTry` - Prevents force try
+- `NeverUseImplicitlyUnwrappedOptionals` - Prevents IUOs
+- `OrderedImports` - Sorts imports alphabetically
+- `UseEarlyExits` - Encourages guard statements
+
+## Note on Test Fixtures
+
+Some fixtures intentionally contain code that violates rules to test that the linter catches them.
+These files use `// swift-format-ignore-file` to prevent CI failures.
 
 ## References
 
-- [SwiftFormat GitHub](https://github.com/nicklockwood/SwiftFormat)
-- [SwiftLint GitHub](https://github.com/realm/SwiftLint)
-- [Airbnb Swift Style Guide](https://github.com/airbnb/swift)
-- [Google Swift Style Guide](https://google.github.io/swift/)
+- [apple/swift-format GitHub](https://github.com/swiftlang/swift-format)
+- [Swift API Design Guidelines](https://swift.org/documentation/api-design-guidelines/)

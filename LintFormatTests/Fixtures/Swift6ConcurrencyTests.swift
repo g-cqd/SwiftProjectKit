@@ -1,8 +1,7 @@
 // MARK: - Swift 6 Concurrency Test Fixtures
 // Tests for Swift 6+ strict concurrency compliance
 //
-// Run: swiftformat --lint Swift6ConcurrencyTests.swift
-// Run: swiftlint lint Swift6ConcurrencyTests.swift
+// Run: xcrun swift-format lint --strict Swift6ConcurrencyTests.swift
 
 import Foundation
 
@@ -29,8 +28,7 @@ actor DataStore {
 }
 
 // BAD: @unchecked Sendable (avoid this)
-// Custom rule `no_unchecked_sendable` should catch this
-// swiftlint:disable:next custom_rules
+// swift-format-ignore: TypeNamesShouldBeCapitalized
 final class UnsafeContainer: @unchecked Sendable {
     var mutableState: Int = 0  // This is NOT actually thread-safe!
 }
@@ -202,11 +200,7 @@ func validateUsername(_ username: String) throws(ValidationError) -> String {
 
 // MARK: - Expected Behavior
 //
-// SwiftLint custom rules should catch:
-// - @unchecked Sendable usage (no_unchecked_sendable)
-// - DispatchQueue usage (could add custom rule)
-//
-// SwiftFormat will:
+// swift-format will:
 // - Organize declarations within actors
 // - Format async/await syntax consistently
 //
@@ -215,4 +209,3 @@ func validateUsername(_ username: String) throws(ValidationError) -> String {
 // 2. Use actors for shared mutable state
 // 3. Prefer async/await over callbacks
 // 4. Use typed throws for precise error handling
-// 5. Add custom SwiftLint rules for concurrency anti-patterns
