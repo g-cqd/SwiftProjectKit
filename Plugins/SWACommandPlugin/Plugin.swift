@@ -102,7 +102,7 @@ struct SWACommandPlugin: CommandPlugin {
         case all
     }
 
-    private let defaultVersion = "0.0.6"
+    private let defaultVersion = "0.0.14"
 
     private func runUnusedAnalysis(
         swaPath: URL,
@@ -124,6 +124,9 @@ struct SWACommandPlugin: CommandPlugin {
         if let configPath = findConfigFile(in: context.package.directoryURL) {
             args += ["--config", configPath.path]
         }
+
+        // Exclude .build directory to prevent crashes on build artifacts
+        args += ["--exclude-paths", ".build"]
 
         args += ["--mode", mode]
         args += ["--sensible-defaults"]
@@ -161,12 +164,17 @@ struct SWACommandPlugin: CommandPlugin {
             args += ["--config", configPath.path]
         }
 
+        // Exclude .build directory to prevent crashes on build artifacts
+        args += ["--exclude-paths", ".build"]
+
         args += ["--format", "text"]
 
-        // Note: --min-tokens flag only added for strict mode
-        // due to compatibility issues with some swa versions
+        // Default min-tokens for sensible clone detection
+        // Note: --min-tokens 80 crashes swa, using 50 as default
         if strict {
             args += ["--min-tokens", "30"]
+        } else {
+            args += ["--min-tokens", "50"]
         }
 
         try runSWA(
@@ -401,14 +409,25 @@ struct SWACommandPlugin: CommandPlugin {
             strict: Bool,
         ) throws {
             var args = [command, projectDir.path]
+
+            // Exclude build directories to prevent crashes
+            args += ["--exclude-paths", "DerivedData"]
+            args += ["--exclude-paths", ".build"]
+
             args += ["--sensible-defaults"]
             args += ["--format", "text"]
 
             if strict, command == "unused" {
                 args += ["--min-confidence", "low"]
             }
-            if strict, command == "duplicates" {
-                args += ["--min-tokens", "30"]
+            // Default min-tokens for sensible clone detection
+            // Note: --min-tokens 80 crashes swa, using 50 as default
+            if command == "duplicates" {
+                if strict {
+                    args += ["--min-tokens", "30"]
+                } else {
+                    args += ["--min-tokens", "50"]
+                }
             }
 
             let process = Process()

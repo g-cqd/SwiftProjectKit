@@ -65,6 +65,9 @@ struct UnusedCodeCommandPlugin: CommandPlugin {
             args += ["--config", configPath.path]
         }
 
+        // Exclude .build directory to prevent crashes on build artifacts
+        args += ["--exclude-paths", ".build"]
+
         // Apply CLI options (override config file)
         args += ["--mode", mode]
         args += ["--format", "text"]
@@ -97,7 +100,7 @@ struct UnusedCodeCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.0.6"
+    private let defaultVersion = "0.0.14"
 
     private func runSWA(
         executableURL: URL,
@@ -258,6 +261,10 @@ struct UnusedCodeCommandPlugin: CommandPlugin {
             if let configPath = findConfigFile(in: projectDir) {
                 args += ["--config", configPath.path]
             }
+
+            // Exclude build directories to prevent crashes
+            args += ["--exclude-paths", "DerivedData"]
+            args += ["--exclude-paths", ".build"]
 
             args += ["--mode", mode]
             args += ["--format", "text"]

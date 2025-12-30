@@ -64,15 +64,20 @@ struct DuplicationCommandPlugin: CommandPlugin {
             args += ["--config", configPath.path]
         }
 
+        // Exclude .build directory to prevent crashes on build artifacts
+        args += ["--exclude-paths", ".build"]
+
         // Apply CLI options (override config file)
         args += ["--format", "text"]
 
-        // Note: --min-tokens flag is only added when explicitly requested
-        // due to compatibility issues with some swa versions
+        // Default min-tokens for sensible clone detection
+        // Note: --min-tokens 80 crashes swa, using 50 as default
         if let tokens = minTokens {
             args += ["--min-tokens", tokens]
         } else if strict {
             args += ["--min-tokens", "30"]
+        } else {
+            args += ["--min-tokens", "50"]
         }
 
         for type in types {
@@ -97,7 +102,7 @@ struct DuplicationCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.0.6"
+    private let defaultVersion = "0.0.14"
 
     private func runSWA(
         executableURL: URL,
@@ -258,12 +263,20 @@ struct DuplicationCommandPlugin: CommandPlugin {
                 args += ["--config", configPath.path]
             }
 
+            // Exclude build directory to prevent crashes
+            args += ["--exclude-paths", "DerivedData"]
+            args += ["--exclude-paths", ".build"]
+
             args += ["--format", "text"]
 
+            // Default min-tokens for sensible clone detection
+            // Note: --min-tokens 80 crashes swa, using 50 as default
             if let tokens = minTokens {
                 args += ["--min-tokens", tokens]
             } else if strict {
                 args += ["--min-tokens", "30"]
+            } else {
+                args += ["--min-tokens", "50"]
             }
 
             for type in types {

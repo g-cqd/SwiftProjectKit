@@ -68,7 +68,7 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.0.6"
+    private let defaultVersion = "0.0.14"
 
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH (system-installed)

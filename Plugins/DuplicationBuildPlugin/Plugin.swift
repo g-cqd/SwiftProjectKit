@@ -41,10 +41,12 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
         }
 
         // Build arguments for duplication detection
+        // Note: --min-tokens 80 crashes swa, using 50 as default
         var arguments = [
             "duplicates",
             sourceTarget.directoryURL.path,
             "--format", "xcode",
+            "--min-tokens", "50",
         ]
 
         // Check for config file
@@ -67,7 +69,7 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.0.6"
+    private let defaultVersion = "0.0.14"
 
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
         // First, check if swa is available in PATH (system-installed)
@@ -209,10 +211,12 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
             outputDir: URL,
             targetName: String,
         ) -> [Command] {
+            // Note: --min-tokens 80 crashes swa, using 50 as default
             var arguments = [
                 "duplicates",
                 targetDirectory.path,
                 "--format", "xcode",
+                "--min-tokens", "50",
             ]
 
             // Check for config file
