@@ -6,6 +6,7 @@ import SwiftProjectKitCore
 // MARK: - WorkflowCommand
 
 struct WorkflowCommand: AsyncParsableCommand {
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "workflow",
         abstract: "Manage GitHub Actions workflows",
@@ -26,6 +27,7 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
         case all
     }
 
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "generate",
         abstract: "Generate GitHub Actions workflow files",

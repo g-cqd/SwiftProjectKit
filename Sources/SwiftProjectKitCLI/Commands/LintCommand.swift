@@ -4,6 +4,7 @@ import Foundation
 import SwiftProjectKitCore
 
 struct LintCommand: AsyncParsableCommand {
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "lint",
         abstract: "Run SwiftLint on the project",

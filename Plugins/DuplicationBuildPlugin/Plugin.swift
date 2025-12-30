@@ -41,10 +41,12 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
         }
 
         // Build arguments for duplication detection
+        // Default to 80 tokens to avoid flagging small switch-case patterns
         var arguments = [
             "duplicates",
             sourceTarget.directoryURL.path,
             "--format", "xcode",
+            "--min-tokens", "80",
         ]
 
         // Check for config file
@@ -67,7 +69,7 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.1.0"
+    private let defaultVersion = "0.0.6"
 
     // swiftlint:disable:next function_body_length
     private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {

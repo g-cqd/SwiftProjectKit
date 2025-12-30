@@ -1,3 +1,5 @@
+// swiftlint:disable file_length
+// Template files benefit from keeping related templates together
 import Foundation
 
 // MARK: - Unified CI/CD Workflow
@@ -9,13 +11,21 @@ public extension DefaultConfigs {
     ///   - platforms: Platform configuration for matrix builds
     ///   - includeRelease: Whether to include release jobs (default: true)
     ///   - includePlatformMatrix: Whether to include platform matrix builds (default: false for CLI/tooling)
+    ///   - includeBinaryRelease: Whether to build and package universal binaries for CLI tools (default: false)
+    ///   - binaryName: The executable name to package (defaults to lowercased project name)
+    ///   - autoReleaseOnMain: Whether to auto-increment and release on push to main (default: false)
     /// - Returns: The complete workflow YAML string
     static func ciWorkflow(
         name: String,
         platforms: PlatformConfiguration,
         includeRelease: Bool = true,
         includePlatformMatrix: Bool = false,
+        includeBinaryRelease: Bool = false,
+        binaryName: String? = nil,
+        autoReleaseOnMain: Bool = false,
     ) -> String {
+        let resolvedBinaryName = binaryName ?? name.lowercased()
+
         var workflow = ciWorkflowHeader(includeRelease: includeRelease)
         workflow += ciLintJob()
         workflow += ciBuildAndTestJob()
@@ -27,9 +37,13 @@ public extension DefaultConfigs {
         }
 
         if includeRelease {
-            workflow += ciValidateReleaseJob()
+            workflow += ciValidateReleaseJob(autoReleaseOnMain: autoReleaseOnMain)
             workflow += ciChangelogJob()
-            workflow += ciCreateReleaseJob(name: name)
+            if includeBinaryRelease {
+                workflow += ciCreateBinaryReleaseJob(name: name, binaryName: resolvedBinaryName)
+            } else {
+                workflow += ciCreateReleaseJob(name: name)
+            }
         }
 
         return workflow
@@ -308,18 +322,29 @@ extension DefaultConfigs {
 
 extension DefaultConfigs {
     // swiftlint:disable:next function_body_length
-    static func ciValidateReleaseJob() -> String {
+    static func ciValidateReleaseJob(autoReleaseOnMain: Bool = false) -> String {
+        let condition = autoReleaseOnMain ? """
+            if: >-
+              github.event_name == 'workflow_dispatch' ||
+              startsWith(github.ref, 'refs/tags/v') ||
+              (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+               !contains(github.event.head_commit.message, '[skip release]') &&
+               !contains(github.event.head_commit.author.name, 'github-actions'))
+        """ : """
+            if: >-
+              github.event_name == 'workflow_dispatch' ||
+              startsWith(github.ref, 'refs/tags/v')
         """
+
+        return """
           # ==========================================================================
-          # Stage 5: Release Validation (Tags and workflow_dispatch only)
+          # Stage 5: Release Validation (Tags, workflow_dispatch\(autoReleaseOnMain ? ", or push to main" : ""))
           # ==========================================================================
           validate-release:
             name: Validate Release
             runs-on: macos-15
             needs: build-and-test
-            if: >-
-              github.event_name == 'workflow_dispatch' ||
-              startsWith(github.ref, 'refs/tags/v')
+        \(condition)
             outputs:
               version: ${{ steps.version.outputs.version }}
               previous_tag: ${{ steps.previous.outputs.tag }}
@@ -459,6 +484,141 @@ extension DefaultConfigs {
         contains(needs.validate-release.outputs.version, 'beta') || \
         contains(needs.validate-release.outputs.version, 'rc') \
         }}
+                env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        """
+    }
+
+    // swiftlint:enable function_body_length
+
+    // swiftlint:disable function_body_length
+    // Creates a release job with universal binary building and packaging for CLI tools
+    static func ciCreateBinaryReleaseJob(name: String, binaryName: String) -> String {
+        """
+          # ==========================================================================
+          # Stage 7: Create GitHub Release with Universal Binaries
+          # ==========================================================================
+          release:
+            name: Create Release
+            runs-on: macos-15
+            needs: [validate-release, changelog]
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Ensure Linting Tools
+                run: |
+                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
+                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
+
+              - name: Cache SPM Dependencies
+                uses: actions/cache@v4
+                with:
+                  path: |
+                    .build
+                    ~/Library/Developer/Xcode/DerivedData
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: spm-${{ runner.os }}-
+
+              - name: Build Universal Binary
+                run: |
+                  # Build for ARM64
+                  swift build -c release --arch arm64
+                  cp .build/arm64-apple-macosx/release/\(binaryName) .build/\(binaryName)-arm64
+
+                  # Build for x86_64
+                  swift build -c release --arch x86_64
+                  cp .build/x86_64-apple-macosx/release/\(binaryName) .build/\(binaryName)-x86_64
+
+                  # Create universal binary
+                  mkdir -p .build/release
+                  lipo -create -output .build/release/\(binaryName) \\
+                    .build/\(binaryName)-arm64 \\
+                    .build/\(binaryName)-x86_64
+
+                  lipo -info .build/release/\(binaryName)
+
+              - name: Package Binaries
+                run: |
+                  VERSION="${{ needs.validate-release.outputs.version }}"
+                  mkdir -p release
+
+                  for ARCH in universal arm64 x86_64; do
+                    if [[ "$ARCH" == "universal" ]]; then
+                      cp .build/release/\(binaryName) release/\(binaryName)
+                    else
+                      cp .build/\(binaryName)-$ARCH release/\(binaryName)
+                    fi
+                    tar -C release -czvf "release/\(binaryName)-${VERSION}-macos-${ARCH}.tar.gz" \(binaryName)
+                  done
+
+                  cd release && shasum -a 256 *.tar.gz > checksums.txt
+
+              - name: Create Tag
+                if: |
+                  (github.event_name == 'workflow_dispatch' && inputs.create_tag) ||
+                  (github.event_name == 'push' && github.ref == 'refs/heads/main')
+                run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag -a "v${{ needs.validate-release.outputs.version }}" \\
+                    -m "Release v${{ needs.validate-release.outputs.version }}" || true
+                  git push origin "v${{ needs.validate-release.outputs.version }}" || true
+
+              - name: Prepare Release Notes
+                run: |
+                  VERSION="${{ needs.validate-release.outputs.version }}"
+                  cat > release_notes.md << RELEASE_EOF
+                  # \(name) v${VERSION}
+
+                  ${{ needs.changelog.outputs.changelog }}
+
+                  ---
+
+                  ## Installation
+
+                  ### Swift Package Manager
+
+                  \\`\\`\\`swift
+                  dependencies: [
+                      .package(url: "https://github.com/g-cqd/\(name).git", from: "${VERSION}")
+                  ]
+                  \\`\\`\\`
+
+                  ### Pre-built Binary (macOS)
+
+                  \\`\\`\\`bash
+                  # Universal (Apple Silicon + Intel)
+                  curl -L https://github.com/g-cqd/\(name)/releases/download/v${VERSION}/\(
+                      binaryName
+                  )-${VERSION}-macos-universal.tar.gz | tar xz
+                  sudo mv \(binaryName) /usr/local/bin/
+                  \\`\\`\\`
+
+                  ### Checksums
+
+                  \\`\\`\\`
+                  $(cat release/checksums.txt)
+                  \\`\\`\\`
+
+                  RELEASE_EOF
+
+              - name: Create GitHub Release
+                uses: softprops/action-gh-release@v2
+                with:
+                  tag_name: v${{ needs.validate-release.outputs.version }}
+                  name: \(name) v${{ needs.validate-release.outputs.version }}
+                  body_path: release_notes.md
+                  draft: false
+                  prerelease: >-
+                    ${{ contains(needs.validate-release.outputs.version, 'alpha') ||
+                        contains(needs.validate-release.outputs.version, 'beta') ||
+                        contains(needs.validate-release.outputs.version, 'rc') }}
+                  files: |
+                    release/\(binaryName)-${{ needs.validate-release.outputs.version }}-macos-*.tar.gz
+                    release/checksums.txt
                 env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         """

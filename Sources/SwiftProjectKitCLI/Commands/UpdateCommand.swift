@@ -6,6 +6,7 @@ import SwiftProjectKitCore
 struct UpdateCommand: AsyncParsableCommand {
     // MARK: Internal
 
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "update",
         abstract: "Update project configuration files to latest standards",

@@ -12,6 +12,7 @@ struct InitCommand: AsyncParsableCommand {
         case app
     }
 
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "init",
         abstract: "Initialize a new Swift project with standard configuration",
@@ -55,6 +56,7 @@ struct InitCommand: AsyncParsableCommand {
     // MARK: Private
 
     // swiftlint:disable:next function_body_length
+    // swa:ignore
     private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)

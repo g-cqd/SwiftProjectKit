@@ -96,7 +96,7 @@ struct UnusedCodeCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.1.0"
+    private let defaultVersion = "0.0.6"
 
     private func runSWA(
         executableURL: URL,

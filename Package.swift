@@ -88,6 +88,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0"),
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.3"),
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.3"),
     ],
     targets: [
         // MARK: - Core Library
@@ -240,7 +241,10 @@ let package = Package(
 
         .testTarget(
             name: "SwiftProjectKitCoreTests",
-            dependencies: ["SwiftProjectKitCore"],
+            dependencies: [
+                "SwiftProjectKitCore",
+                .product(name: "Yams", package: "Yams"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

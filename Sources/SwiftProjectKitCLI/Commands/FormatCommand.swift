@@ -4,6 +4,7 @@ import Foundation
 import SwiftProjectKitCore
 
 struct FormatCommand: AsyncParsableCommand {
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "format",
         abstract: "Run SwiftFormat on the project",

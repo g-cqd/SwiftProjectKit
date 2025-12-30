@@ -1,3 +1,37 @@
+// MockDependencies.swift
+// Test doubles for dependency injection in BinaryManager tests.
+//
+// ## Purpose
+// These mocks enable isolated unit testing of BinaryManager without:
+// - Actual file system operations
+// - Real network requests
+// - External tool dependencies (unzip)
+//
+// ## Mocks Provided
+// - `MockFileSystem`: Tracks file operations in memory
+// - `MockNetworkSession`: Simulates HTTP downloads with configurable responses
+// - `MockArchiveExtractor`: Simulates archive extraction
+//
+// ## Thread Safety
+// All mocks use appropriate synchronization:
+// - `MockFileSystem`: Uses `NSLock` for thread-safe access
+// - `MockNetworkSession`: Actor-isolated state
+// - `MockArchiveExtractor`: Actor-isolated state
+//
+// ## Usage
+// ```swift
+// let fileSystem = MockFileSystem()
+// let network = MockNetworkSession()
+// let extractor = MockArchiveExtractor()
+//
+// let manager = BinaryManager(
+//     cacheDirectory: tempDir,
+//     fileSystem: fileSystem,
+//     networkSession: network,
+//     archiveExtractor: extractor
+// )
+// ```
+
 import Foundation
 @testable import SwiftProjectKitCore
 

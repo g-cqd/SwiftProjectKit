@@ -71,7 +71,7 @@ struct SWABuildPlugin: BuildToolPlugin {
     // MARK: Private
 
     /// Default SwiftStaticAnalysis version to use
-    private let defaultVersion = "0.1.0"
+    private let defaultVersion = "0.0.6"
 
     // MARK: - Private Helpers
 

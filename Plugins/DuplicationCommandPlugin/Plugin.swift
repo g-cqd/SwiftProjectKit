@@ -70,6 +70,9 @@ struct DuplicationCommandPlugin: CommandPlugin {
             args += ["--min-tokens", tokens]
         } else if strict {
             args += ["--min-tokens", "30"]
+        } else {
+            // Default to 80 tokens to avoid flagging small switch-case patterns
+            args += ["--min-tokens", "80"]
         }
 
         for type in types {
@@ -94,7 +97,7 @@ struct DuplicationCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.1.0"
+    private let defaultVersion = "0.0.6"
 
     private func runSWA(
         executableURL: URL,

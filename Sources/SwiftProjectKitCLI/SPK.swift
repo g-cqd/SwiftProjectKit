@@ -4,6 +4,7 @@ import SwiftProjectKitCore
 
 @main
 struct SPK: AsyncParsableCommand {
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "spk",
         abstract: "Swift Project Kit - Opinionated tooling for Swift projects by g-cqd",

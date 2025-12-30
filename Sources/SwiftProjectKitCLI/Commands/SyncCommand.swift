@@ -6,6 +6,7 @@ import SwiftProjectKitCore
 struct SyncCommand: AsyncParsableCommand {
     // MARK: Internal
 
+    // swa:ignore-unused
     static let configuration = CommandConfiguration(
         commandName: "sync",
         abstract: "Sync project to standards - fill gaps, update, and fix everything",
