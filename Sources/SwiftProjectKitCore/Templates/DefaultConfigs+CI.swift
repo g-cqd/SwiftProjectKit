@@ -13,7 +13,8 @@ public extension DefaultConfigs {
     ///   - includePlatformMatrix: Whether to include platform matrix builds (default: false for CLI/tooling)
     ///   - includeBinaryRelease: Whether to build and package universal binaries for CLI tools (default: false)
     ///   - binaryName: The executable name to package (defaults to lowercased project name)
-    ///   - autoReleaseOnMain: Whether to auto-increment and release on push to main (default: false)
+    ///   - includeHomebrew: Whether to generate Homebrew formula (default: false, requires includeBinaryRelease)
+    ///   - homebrewTap: The Homebrew tap name (e.g., "g-cqd/tap")
     /// - Returns: The complete workflow YAML string
     static func ciWorkflow(
         name: String,
@@ -22,7 +23,8 @@ public extension DefaultConfigs {
         includePlatformMatrix: Bool = false,
         includeBinaryRelease: Bool = false,
         binaryName: String? = nil,
-        autoReleaseOnMain: Bool = false,
+        includeHomebrew: Bool = false,
+        homebrewTap: String? = nil,
     ) -> String {
         let resolvedBinaryName = binaryName ?? name.lowercased()
 
@@ -37,10 +39,14 @@ public extension DefaultConfigs {
         }
 
         if includeRelease {
-            workflow += ciValidateReleaseJob(autoReleaseOnMain: autoReleaseOnMain)
-            workflow += ciChangelogJob()
+            workflow += ciPrepareReleaseJob()
             if includeBinaryRelease {
-                workflow += ciCreateBinaryReleaseJob(name: name, binaryName: resolvedBinaryName)
+                workflow += ciCreateBinaryReleaseJob(
+                    name: name,
+                    binaryName: resolvedBinaryName,
+                    includeHomebrew: includeHomebrew,
+                    homebrewTap: homebrewTap,
+                )
             } else {
                 workflow += ciCreateReleaseJob(name: name)
             }
@@ -64,15 +70,13 @@ extension DefaultConfigs {
             branches: [main]
           workflow_dispatch:
             inputs:
-              version:
-                description: 'Version to release (e.g., 1.2.0)'
-                required: true
-                type: string
-              create_tag:
-                description: 'Create git tag'
-                required: true
+              release:
+                description: 'Create release'
                 type: boolean
-                default: true
+                default: false
+              version:
+                description: 'Version override (e.g., 1.0.0)'
+                required: false
         """ : """
         on:
           push:
@@ -322,32 +326,24 @@ extension DefaultConfigs {
 
 extension DefaultConfigs {
     // swiftlint:disable:next function_body_length
-    static func ciValidateReleaseJob(autoReleaseOnMain: Bool = false) -> String {
-        let condition = autoReleaseOnMain ? """
-            if: >-
-              github.event_name == 'workflow_dispatch' ||
-              startsWith(github.ref, 'refs/tags/v') ||
-              (github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-               !contains(github.event.head_commit.message, '[skip release]') &&
-               !contains(github.event.head_commit.author.name, 'github-actions'))
-        """ : """
-            if: >-
-              github.event_name == 'workflow_dispatch' ||
-              startsWith(github.ref, 'refs/tags/v')
+    static func ciPrepareReleaseJob() -> String {
         """
-
-        return """
           # ==========================================================================
-          # Stage 5: Release Validation (Tags, workflow_dispatch\(autoReleaseOnMain ? ", or push to main" : ""))
+          # Stage 5: Prepare Release (on tags, manual dispatch, or push to main)
           # ==========================================================================
-          validate-release:
-            name: Validate Release
-            runs-on: macos-15
+          prepare-release:
+            name: Prepare Release
+            runs-on: ubuntu-latest
             needs: build-and-test
-        \(condition)
+            if: >-
+              startsWith(github.ref, 'refs/tags/v') ||
+              (github.event_name == 'workflow_dispatch' && inputs.release) ||
+              github.event_name == 'push'
             outputs:
               version: ${{ steps.version.outputs.version }}
-              previous_tag: ${{ steps.previous.outputs.tag }}
+              tag: ${{ steps.version.outputs.tag }}
+              should_release: ${{ steps.version.outputs.should_release }}
+              changelog: ${{ steps.changelog.outputs.content }}
             steps:
               - uses: actions/checkout@v4
                 with:
@@ -356,71 +352,68 @@ extension DefaultConfigs {
               - name: Determine Version
                 id: version
                 run: |
-                  if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+                  # Read version from VERSION file (single source of truth)
+                  if [[ -f "VERSION" ]]; then
+                    VERSION=$(cat VERSION | tr -d '[:space:]')
+                  elif [[ -n "${{ inputs.version }}" ]]; then
                     VERSION="${{ inputs.version }}"
                   elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
                     VERSION="${GITHUB_REF#refs/tags/v}"
                   else
-                    # Auto-increment: get latest tag and bump patch version
-                    LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-                    LATEST_VERSION="${LATEST_TAG#v}"
-
-                    # Parse semver
-                    IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
-                    PATCH=$((PATCH + 1))
-                    VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
-                    echo "Auto-incrementing from $LATEST_VERSION to $VERSION"
+                    echo "No VERSION file found and no version specified"
+                    exit 1
                   fi
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "Releasing version: $VERSION"
 
-              - name: Get Previous Tag
-                id: previous
-                run: |
-                  PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-                  echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+                  TAG="v${VERSION}"
+                  echo "version=${VERSION}" >> $GITHUB_OUTPUT
+                  echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
-        """
-    }
-
-    static func ciChangelogJob() -> String {
-        """
-          # ==========================================================================
-          # Stage 6: Generate Changelog (Tags and workflow_dispatch, runs on Linux)
-          # ==========================================================================
-          changelog:
-            name: Generate Changelog
-            runs-on: ubuntu-latest
-            needs: validate-release
-            outputs:
-              changelog: ${{ steps.generate.outputs.changelog }}
-            steps:
-              - uses: actions/checkout@v4
-                with:
-                  fetch-depth: 0
+                  # Check if this version already has a tag (skip release if so)
+                  if git rev-parse "${TAG}" >/dev/null 2>&1; then
+                    echo "Tag ${TAG} already exists - skipping release"
+                    echo "should_release=false" >> $GITHUB_OUTPUT
+                  else
+                    echo "New version ${VERSION} - will create release"
+                    echo "should_release=true" >> $GITHUB_OUTPUT
+                  fi
 
               - name: Generate Changelog
-                id: generate
+                id: changelog
                 run: |
-                  PREV_TAG="${{ needs.validate-release.outputs.previous_tag }}"
-                  VERSION="${{ needs.validate-release.outputs.version }}"
+                  PREVIOUS=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+                  RANGE="${PREVIOUS:+$PREVIOUS..}HEAD"
 
                   {
-                    echo 'changelog<<EOF'
-                    echo "## What's Changed in v$VERSION"
-                    echo ""
+                    echo "content<<EOF"
 
-                    if [[ -n "$PREV_TAG" ]]; then
-                      echo "### Commits"
-                      git log $PREV_TAG..HEAD --pretty=format:"- %h %s (%an)" | head -50
-                    else
-                      echo "Initial release"
-                      git log --pretty=format:"- %h %s (%an)" | head -50
+                    # Features
+                    FEATURES=$(git log $RANGE --pretty=format:"- %s (%h)" \\
+                      --grep="^feat" --grep="^add" --grep="^new" -i 2>/dev/null | head -20 || echo "")
+                    if [[ -n "$FEATURES" ]]; then
+                      echo "### Features"
+                      echo "$FEATURES"
+                      echo ""
                     fi
 
-                    echo ""
-                    echo 'EOF'
+                    # Bug Fixes
+                    FIXES=$(git log $RANGE --pretty=format:"- %s (%h)" \\
+                      --grep="^fix" -i 2>/dev/null | head -20 || echo "")
+                    if [[ -n "$FIXES" ]]; then
+                      echo "### Bug Fixes"
+                      echo "$FIXES"
+                      echo ""
+                    fi
+
+                    # Other changes
+                    OTHER=$(git log $RANGE --pretty=format:"- %s (%h)" --invert-grep \\
+                      --grep="^feat" --grep="^fix" --grep="^add" --grep="^new" -i 2>/dev/null | head -15 || echo "")
+                    if [[ -n "$OTHER" ]]; then
+                      echo "### Other Changes"
+                      echo "$OTHER"
+                      echo ""
+                    fi
+
+                    echo "EOF"
                   } >> $GITHUB_OUTPUT
 
         """
@@ -430,30 +423,34 @@ extension DefaultConfigs {
     static func ciCreateReleaseJob(name: String) -> String {
         """
           # ==========================================================================
-          # Stage 7: Create GitHub Release (Tags and workflow_dispatch)
+          # Stage 6: Create GitHub Release (Tags and workflow_dispatch)
           # ==========================================================================
           release:
             name: Create Release
             runs-on: macos-15
-            needs: [validate-release, changelog]
+            needs: prepare-release
+            if: needs.prepare-release.outputs.should_release == 'true'
             steps:
               - uses: actions/checkout@v4
 
               - name: Create Tag
-                if: github.event_name == 'workflow_dispatch' && inputs.create_tag
+                if: >-
+                  github.event_name == 'workflow_dispatch' ||
+                  (github.event_name == 'push' && github.ref == 'refs/heads/main')
                 run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git tag -a "v${{ needs.validate-release.outputs.version }}" \\
-                    -m "Release v${{ needs.validate-release.outputs.version }}"
-                  git push origin "v${{ needs.validate-release.outputs.version }}"
+                  git tag -a "${{ needs.prepare-release.outputs.tag }}" \\
+                    -m "Release ${{ needs.prepare-release.outputs.version }}" || true
+                  git push origin "${{ needs.prepare-release.outputs.tag }}" || true
 
               - name: Prepare Release Notes
                 run: |
+                  VERSION="${{ needs.prepare-release.outputs.version }}"
                   cat > release_notes.md << 'RELEASE_EOF'
-                  # \(name) v${{ needs.validate-release.outputs.version }}
+                  # \(name) v${VERSION}
 
-                  ${{ needs.changelog.outputs.changelog }}
+                  ${{ needs.prepare-release.outputs.changelog }}
 
                   ---
 
@@ -465,7 +462,7 @@ extension DefaultConfigs {
                   dependencies: [
                       .package(
                           url: "https://github.com/g-cqd/\(name).git",
-                          from: "${{ needs.validate-release.outputs.version }}"
+                          from: "${VERSION}"
                       )
                   ]
                   ```
@@ -475,15 +472,14 @@ extension DefaultConfigs {
               - name: Create GitHub Release
                 uses: softprops/action-gh-release@v2
                 with:
-                  tag_name: v${{ needs.validate-release.outputs.version }}
-                  name: \(name) v${{ needs.validate-release.outputs.version }}
+                  tag_name: ${{ needs.prepare-release.outputs.tag }}
+                  name: \(name) ${{ needs.prepare-release.outputs.version }}
                   body_path: release_notes.md
                   draft: false
-                  prerelease: ${{ \
-        contains(needs.validate-release.outputs.version, 'alpha') || \
-        contains(needs.validate-release.outputs.version, 'beta') || \
-        contains(needs.validate-release.outputs.version, 'rc') \
-        }}
+                  prerelease: >-
+                    ${{ contains(needs.prepare-release.outputs.version, 'alpha') ||
+                        contains(needs.prepare-release.outputs.version, 'beta') ||
+                        contains(needs.prepare-release.outputs.version, 'rc') }}
                 env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         """
@@ -493,15 +489,86 @@ extension DefaultConfigs {
 
     // swiftlint:disable function_body_length
     // Creates a release job with universal binary building and packaging for CLI tools
-    static func ciCreateBinaryReleaseJob(name: String, binaryName: String) -> String {
-        """
+    static func ciCreateBinaryReleaseJob(
+        name: String,
+        binaryName: String,
+        includeHomebrew: Bool = false,
+        homebrewTap: String? = nil,
+    ) -> String {
+        let homebrewInstall = if includeHomebrew, let tap = homebrewTap {
+            """
+
+                      **Homebrew:**
+                      \\`\\`\\`bash
+                      brew tap \(tap)
+                      brew install \(binaryName)
+                      \\`\\`\\`
+            """
+        } else {
+            ""
+        }
+
+        let homebrewFormulaStep = if includeHomebrew {
+            """
+
+                  - name: Generate Homebrew Formula
+                    run: |
+                      VERSION="${{ needs.prepare-release.outputs.version }}"
+                      TAG="${{ needs.prepare-release.outputs.tag }}"
+
+                      # Read checksums
+                      ARM64_SHA=$(grep "arm64" release/checksums.txt | awk '{print $1}')
+                      X86_SHA=$(grep "x86_64" release/checksums.txt | awk '{print $1}')
+
+                      cat > release/\(binaryName).rb << FORMULA_EOF
+                      class \(binaryName.capitalized) < Formula
+                        desc "\(name) CLI tool"
+                        homepage "https://github.com/g-cqd/\(name)"
+                        version "${VERSION}"
+                        license "MIT"
+
+                        on_macos do
+                          if Hardware::CPU.arm?
+                            url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
+                                binaryName
+                            )-${VERSION}-macos-arm64.tar.gz"
+                            sha256 "${ARM64_SHA}"
+                          else
+                            url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
+                                binaryName
+                            )-${VERSION}-macos-x86_64.tar.gz"
+                            sha256 "${X86_SHA}"
+                          end
+                        end
+
+                        def install
+                          bin.install "\(binaryName)"
+                        end
+
+                        test do
+                          assert_match version.to_s, shell_output("#{bin}/\(binaryName) --version")
+                        end
+                      end
+                      FORMULA_EOF
+            """
+        } else {
+            ""
+        }
+
+        let formulaFile = includeHomebrew ? """
+
+                release/\(binaryName).rb
+        """ : ""
+
+        return """
           # ==========================================================================
-          # Stage 7: Create GitHub Release with Universal Binaries
+          # Stage 6: Create GitHub Release with Universal Binaries
           # ==========================================================================
           release:
             name: Create Release
             runs-on: macos-15
-            needs: [validate-release, changelog]
+            needs: prepare-release
+            if: needs.prepare-release.outputs.should_release == 'true'
             steps:
               - uses: actions/checkout@v4
 
@@ -542,7 +609,7 @@ extension DefaultConfigs {
 
               - name: Package Binaries
                 run: |
-                  VERSION="${{ needs.validate-release.outputs.version }}"
+                  VERSION="${{ needs.prepare-release.outputs.version }}"
                   mkdir -p release
 
                   for ARCH in universal arm64 x86_64; do
@@ -555,43 +622,43 @@ extension DefaultConfigs {
                   done
 
                   cd release && shasum -a 256 *.tar.gz > checksums.txt
+        \(homebrewFormulaStep)
 
               - name: Create Tag
-                if: |
-                  (github.event_name == 'workflow_dispatch' && inputs.create_tag) ||
+                if: >-
+                  github.event_name == 'workflow_dispatch' ||
                   (github.event_name == 'push' && github.ref == 'refs/heads/main')
                 run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git tag -a "v${{ needs.validate-release.outputs.version }}" \\
-                    -m "Release v${{ needs.validate-release.outputs.version }}" || true
-                  git push origin "v${{ needs.validate-release.outputs.version }}" || true
+                  git tag -a "${{ needs.prepare-release.outputs.tag }}" \\
+                    -m "Release ${{ needs.prepare-release.outputs.version }}" || true
+                  git push origin "${{ needs.prepare-release.outputs.tag }}" || true
 
               - name: Prepare Release Notes
                 run: |
-                  VERSION="${{ needs.validate-release.outputs.version }}"
+                  VERSION="${{ needs.prepare-release.outputs.version }}"
+                  TAG="${{ needs.prepare-release.outputs.tag }}"
                   cat > release_notes.md << RELEASE_EOF
                   # \(name) v${VERSION}
 
-                  ${{ needs.changelog.outputs.changelog }}
+                  ${{ needs.prepare-release.outputs.changelog }}
 
                   ---
 
                   ## Installation
-
-                  ### Swift Package Manager
-
+        \(homebrewInstall)
+                  **Swift Package Manager:**
                   \\`\\`\\`swift
                   dependencies: [
                       .package(url: "https://github.com/g-cqd/\(name).git", from: "${VERSION}")
                   ]
                   \\`\\`\\`
 
-                  ### Pre-built Binary (macOS)
-
+                  **Pre-built Binary (macOS):**
                   \\`\\`\\`bash
                   # Universal (Apple Silicon + Intel)
-                  curl -L https://github.com/g-cqd/\(name)/releases/download/v${VERSION}/\(
+                  curl -L https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
                       binaryName
                   )-${VERSION}-macos-universal.tar.gz | tar xz
                   sudo mv \(binaryName) /usr/local/bin/
@@ -608,17 +675,17 @@ extension DefaultConfigs {
               - name: Create GitHub Release
                 uses: softprops/action-gh-release@v2
                 with:
-                  tag_name: v${{ needs.validate-release.outputs.version }}
-                  name: \(name) v${{ needs.validate-release.outputs.version }}
+                  tag_name: ${{ needs.prepare-release.outputs.tag }}
+                  name: \(name) ${{ needs.prepare-release.outputs.version }}
                   body_path: release_notes.md
                   draft: false
                   prerelease: >-
-                    ${{ contains(needs.validate-release.outputs.version, 'alpha') ||
-                        contains(needs.validate-release.outputs.version, 'beta') ||
-                        contains(needs.validate-release.outputs.version, 'rc') }}
+                    ${{ contains(needs.prepare-release.outputs.version, 'alpha') ||
+                        contains(needs.prepare-release.outputs.version, 'beta') ||
+                        contains(needs.prepare-release.outputs.version, 'rc') }}
                   files: |
-                    release/\(binaryName)-${{ needs.validate-release.outputs.version }}-macos-*.tar.gz
-                    release/checksums.txt
+                    release/\(binaryName)-${{ needs.prepare-release.outputs.version }}-macos-*.tar.gz
+                    release/checksums.txt\(formulaFile)
                 env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         """

@@ -6,10 +6,17 @@
 // - Ensure required jobs and steps are present
 // - Validate triggers and permissions are correct
 // - Test platform matrix generation
-// - Verify release workflow integration
+// - Verify release workflow integration with VERSION file
+// - Test tag existence check to prevent duplicate releases
 // - Test binary release features (universal binary, packaging, checksums)
-// - Validate auto-release on main functionality
+// - Validate Homebrew formula generation
 // - Ensure custom binary names work correctly
+//
+// ## Release Flow
+// The release workflow uses a VERSION file as single source of truth:
+// 1. prepare-release job reads VERSION and checks if tag exists
+// 2. If tag exists, should_release=false and release job is skipped
+// 3. If new version, should_release=true, release job creates tag and release
 //
 // ## Why These Tests Matter
 // Invalid GitHub Actions workflows will fail CI. These tests ensure
@@ -316,8 +323,8 @@ struct CIWorkflowTests {
         #expect(push["tags"] != nil, "Release workflow should trigger on tags")
     }
 
-    @Test("Release workflow has validate-release job")
-    func releaseHasValidateJob() throws {
+    @Test("Release workflow has prepare-release job")
+    func releaseHasPrepareJob() throws {
         let yaml = try parseWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
@@ -330,27 +337,22 @@ struct CIWorkflowTests {
         }
 
         #expect(
-            jobs["validate-release"] != nil,
-            "Release workflow should have validate-release job",
+            jobs["prepare-release"] != nil,
+            "Release workflow should have prepare-release job",
         )
     }
 
-    @Test("Release workflow has changelog job")
-    func releaseHasChangelogJob() throws {
-        let yaml = try parseWorkflow(
+    @Test("Prepare-release job includes changelog generation")
+    func prepareReleaseGeneratesChangelog() {
+        let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
             includeRelease: true,
         )
 
-        guard let jobs = yaml["jobs"] as? [String: Any] else {
-            Issue.record("Jobs section not found")
-            return
-        }
-
         #expect(
-            jobs["changelog"] != nil,
-            "Release workflow should have changelog job",
+            workflow.contains("Generate Changelog"),
+            "Prepare-release should include changelog generation step",
         )
     }
 
@@ -398,8 +400,7 @@ struct CIWorkflowTests {
             return
         }
 
-        #expect(jobs["validate-release"] == nil, "Should not have validate-release job")
-        #expect(jobs["changelog"] == nil, "Should not have changelog job")
+        #expect(jobs["prepare-release"] == nil, "Should not have prepare-release job")
         #expect(jobs["release"] == nil, "Should not have release job")
     }
 
@@ -458,7 +459,7 @@ struct CIWorkflowTests {
         )
 
         #expect(
-            workflow.contains("spk-${{ needs.validate-release.outputs.version }}-macos-"),
+            workflow.contains("spk-${{ needs.prepare-release.outputs.version }}-macos-"),
             "Should upload versioned binaries",
         )
         #expect(workflow.contains("checksums.txt"), "Should upload checksums")
@@ -520,69 +521,65 @@ struct CIWorkflowTests {
         #expect(!workflow.contains("lipo -create"), "Should not use lipo")
     }
 
-    // MARK: - Auto Release on Main
+    // MARK: - Version File Release
 
-    @Test("Auto release on main includes push to main trigger")
-    func autoReleaseOnMainIncludesPushTrigger() {
+    @Test("Release workflow uses VERSION file as source of truth")
+    func releaseUsesVersionFile() {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
             includeRelease: true,
-            autoReleaseOnMain: true,
         )
 
         #expect(
-            workflow.contains("github.ref == 'refs/heads/main'"),
-            "Should check for push to main",
+            workflow.contains("VERSION"),
+            "Should read from VERSION file",
         )
         #expect(
-            workflow.contains("[skip release]"),
-            "Should support [skip release] in commit message",
-        )
-        #expect(
-            workflow.contains("github-actions"),
-            "Should skip bot commits",
+            workflow.contains("should_release"),
+            "Should have should_release output for conditional release",
         )
     }
 
-    @Test("Auto release on main has correct validate-release condition")
-    func autoReleaseOnMainValidateCondition() throws {
+    @Test("Release checks if tag already exists")
+    func releaseChecksTagExists() {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
             includeRelease: true,
-            autoReleaseOnMain: true,
         )
 
         #expect(
-            workflow.contains("push to main"),
-            "Stage comment should mention push to main",
+            workflow.contains("git rev-parse"),
+            "Should check if tag exists using git rev-parse",
+        )
+        #expect(
+            workflow.contains("skipping release"),
+            "Should skip release when tag exists",
         )
     }
 
-    @Test("Non-auto-release excludes push to main trigger in validate-release")
-    func nonAutoReleaseExcludesPushTrigger() {
+    @Test("Release job has conditional execution based on should_release")
+    func releaseJobIsConditional() {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
             includeRelease: true,
-            autoReleaseOnMain: false,
         )
 
         #expect(
-            !workflow.contains("[skip release]"),
-            "Should not check for skip release commit",
+            workflow.contains("should_release == 'true'"),
+            "Release job should only run when should_release is true",
         )
     }
 
-    @Test("Auto release creates tag on push to main")
-    func autoReleaseCreatesTagOnPushToMain() {
+    @Test("Release workflow creates tag on push to main")
+    func releaseCreatesTagOnPushToMain() {
         let workflow = DefaultConfigs.ciWorkflow(
             name: "TestPackage",
             platforms: .macOSOnly,
             includeRelease: true,
             includeBinaryRelease: true,
-            autoReleaseOnMain: true,
         )
 
         #expect(
@@ -601,7 +598,6 @@ struct CIWorkflowTests {
             includeRelease: true,
             includeBinaryRelease: true,
             binaryName: "spk",
-            autoReleaseOnMain: true,
         )
 
         let parsed = try Yams.load(yaml: workflow) as? [String: Any]
@@ -615,8 +611,7 @@ struct CIWorkflowTests {
         #expect(jobs["lint"] != nil, "Should have lint job")
         #expect(jobs["build-and-test"] != nil, "Should have build-and-test job")
         #expect(jobs["codeql"] != nil, "Should have codeql job")
-        #expect(jobs["validate-release"] != nil, "Should have validate-release job")
-        #expect(jobs["changelog"] != nil, "Should have changelog job")
+        #expect(jobs["prepare-release"] != nil, "Should have prepare-release job")
         #expect(jobs["release"] != nil, "Should have release job")
     }
 
@@ -631,7 +626,6 @@ struct CIWorkflowTests {
         includePlatformMatrix: Bool = false,
         includeBinaryRelease: Bool = false,
         binaryName: String? = nil,
-        autoReleaseOnMain: Bool = false,
     ) throws -> [String: Any] {
         let workflow = DefaultConfigs.ciWorkflow(
             name: name,
@@ -640,7 +634,6 @@ struct CIWorkflowTests {
             includePlatformMatrix: includePlatformMatrix,
             includeBinaryRelease: includeBinaryRelease,
             binaryName: binaryName,
-            autoReleaseOnMain: autoReleaseOnMain,
         )
 
         guard let parsed = try Yams.load(yaml: workflow) as? [String: Any] else {
