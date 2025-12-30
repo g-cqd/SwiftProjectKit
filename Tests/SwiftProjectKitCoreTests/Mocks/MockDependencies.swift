@@ -33,6 +33,7 @@
 // ```
 
 import Foundation
+
 @testable import SwiftProjectKitCore
 
 // MARK: - MockFileSystem
@@ -156,12 +157,12 @@ actor MockNetworkSession: NetworkSession {
 
     func setResponse(localURL: URL, httpStatusCode: Int) {
         guard let mockURL = URL(string: "https://example.com"),
-              let response = HTTPURLResponse(
-                  url: mockURL,
-                  statusCode: httpStatusCode,
-                  httpVersion: nil,
-                  headerFields: nil,
-              )
+            let response = HTTPURLResponse(
+                url: mockURL,
+                statusCode: httpStatusCode,
+                httpVersion: nil,
+                headerFields: nil,
+            )
         else {
             fatalError("Test configuration error: Failed to create mock URL or HTTPURLResponse")
         }

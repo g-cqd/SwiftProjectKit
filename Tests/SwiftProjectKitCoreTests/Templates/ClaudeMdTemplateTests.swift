@@ -12,8 +12,9 @@
 // incomplete templates lead to poor AI-assisted code quality.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("CLAUDE.md Template Tests")
 struct ClaudeMdTemplateTests {
@@ -95,9 +96,9 @@ struct ClaudeMdTemplateTests {
         let forbiddenIndex = template.range(of: "## Forbidden Patterns")?.lowerBound
 
         guard let core = coreIndex,
-              let swift = swiftIndex,
-              let impl = implIndex,
-              let forbidden = forbiddenIndex
+            let swift = swiftIndex,
+            let impl = implIndex,
+            let forbidden = forbiddenIndex
         else {
             Issue.record("Missing required sections")
             return

@@ -14,8 +14,9 @@
 // Bugs here cause builds to fail or re-download binaries unnecessarily.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("BinaryManager Tests")
 struct BinaryManagerTests {
@@ -29,23 +30,23 @@ struct BinaryManagerTests {
     func binaryPathConstruction() async {
         let manager = createManager()
 
-        let path = await manager.binaryPath(for: .swiftlint, version: "0.57.1")
+        let path = await manager.binaryPath(for: .swa, version: "0.1.0")
 
         #expect(path.path.contains("bin"), "Path should contain 'bin' directory")
-        #expect(path.path.contains("swiftlint"), "Path should contain tool name")
-        #expect(path.path.contains("0.57.1"), "Path should contain version")
-        #expect(path.lastPathComponent == "swiftlint", "Should end with binary name")
+        #expect(path.path.contains("swa"), "Path should contain tool name")
+        #expect(path.path.contains("0.1.0"), "Path should contain version")
+        #expect(path.lastPathComponent == "swa", "Should end with binary name")
     }
 
     @Test("Binary path includes cache directory")
     func binaryPathIncludesCacheDirectory() async {
         let manager = createManager()
 
-        let path = await manager.binaryPath(for: .swiftformat, version: "0.54.6")
+        let path = await manager.binaryPath(for: .swa, version: "0.1.0")
 
         #expect(
             path.path.hasPrefix(cacheDirectory.path),
-            "Path should start with cache directory",
+            "Path should start with cache directory"
         )
     }
 
@@ -53,20 +54,10 @@ struct BinaryManagerTests {
     func differentVersionsDifferentPaths() async {
         let manager = createManager()
 
-        let path1 = await manager.binaryPath(for: .swiftlint, version: "0.57.0")
-        let path2 = await manager.binaryPath(for: .swiftlint, version: "0.57.1")
+        let path1 = await manager.binaryPath(for: .swa, version: "0.1.0")
+        let path2 = await manager.binaryPath(for: .swa, version: "0.2.0")
 
         #expect(path1 != path2, "Different versions should have different paths")
-    }
-
-    @Test("Different tools have different paths")
-    func differentToolsDifferentPaths() async {
-        let manager = createManager()
-
-        let path1 = await manager.binaryPath(for: .swiftlint, version: "1.0.0")
-        let path2 = await manager.binaryPath(for: .swiftformat, version: "1.0.0")
-
-        #expect(path1 != path2, "Different tools should have different paths")
     }
 
     // MARK: - Cache Detection
@@ -76,7 +67,7 @@ struct BinaryManagerTests {
         let fileSystem = MockFileSystem()
         let manager = createManager(fileSystem: fileSystem)
 
-        let isCached = await manager.isCached(tool: .swiftlint)
+        let isCached = await manager.isCached(tool: .swa)
 
         #expect(!isCached, "Should not be cached when file doesn't exist")
     }
@@ -87,12 +78,12 @@ struct BinaryManagerTests {
         let manager = createManager(fileSystem: fileSystem)
 
         let binaryPath = await manager.binaryPath(
-            for: .swiftlint,
-            version: ManagedTool.swiftlint.defaultVersion,
+            for: .swa,
+            version: ManagedTool.swa.defaultVersion
         )
         fileSystem.addExistingPath(binaryPath.path)
 
-        let isCached = await manager.isCached(tool: .swiftlint)
+        let isCached = await manager.isCached(tool: .swa)
 
         #expect(isCached, "Should be cached when file exists")
     }
@@ -103,12 +94,12 @@ struct BinaryManagerTests {
         let manager = createManager(fileSystem: fileSystem)
 
         let defaultPath = await manager.binaryPath(
-            for: .swiftlint,
-            version: ManagedTool.swiftlint.defaultVersion,
+            for: .swa,
+            version: ManagedTool.swa.defaultVersion
         )
         fileSystem.addExistingPath(defaultPath.path)
 
-        let isCached = await manager.isCached(tool: .swiftlint)
+        let isCached = await manager.isCached(tool: .swa)
 
         #expect(isCached)
     }
@@ -121,10 +112,10 @@ struct BinaryManagerTests {
         let networkSession = MockNetworkSession()
         let manager = createManager(fileSystem: fileSystem, networkSession: networkSession)
 
-        let binaryPath = await manager.binaryPath(for: .swiftlint, version: "0.57.1")
+        let binaryPath = await manager.binaryPath(for: .swa, version: "0.1.0")
         fileSystem.addExistingPath(binaryPath.path)
 
-        let result = try await manager.ensureBinary(for: .swiftlint, version: "0.57.1")
+        let result = try await manager.ensureBinary(for: .swa, version: "0.1.0")
 
         #expect(result == binaryPath)
 
@@ -146,23 +137,23 @@ struct BinaryManagerTests {
         let manager = createManager(
             fileSystem: fileSystem,
             networkSession: networkSession,
-            extractor: extractor,
+            extractor: extractor
         )
 
-        let binaryPath = await manager.binaryPath(for: .swiftformat, version: "0.54.6")
+        let binaryPath = await manager.binaryPath(for: .swa, version: "0.1.0")
 
         await extractor.setOnExtract { _, _ in
             fileSystem.addExistingPath(binaryPath.path)
             fileSystem.setAttributes([.posixPermissions: 0o644], for: binaryPath.path)
         }
 
-        let result = try await manager.ensureBinary(for: .swiftformat, version: "0.54.6")
+        let result = try await manager.ensureBinary(for: .swa, version: "0.1.0")
 
         #expect(result == binaryPath)
 
         let downloadedURLs = await networkSession.downloadedURLs
         #expect(downloadedURLs.count == 1)
-        #expect(downloadedURLs.first?.absoluteString.contains("swiftformat") == true)
+        #expect(downloadedURLs.first?.absoluteString.contains("swa") == true)
 
         let extracted = await extractor.getExtractedArchives()
         #expect(extracted.count == 1)
@@ -182,16 +173,16 @@ struct BinaryManagerTests {
         let manager = createManager(
             fileSystem: fileSystem,
             networkSession: networkSession,
-            extractor: extractor,
+            extractor: extractor
         )
 
         do {
-            _ = try await manager.ensureBinary(for: .swiftlint, version: "0.57.1")
+            _ = try await manager.ensureBinary(for: .swa, version: "0.1.0")
             Issue.record("Expected error to be thrown")
         } catch let error as BinaryManagerError {
-            if case let .downloadFailed(tool, version, statusCode) = error {
-                #expect(tool == .swiftlint)
-                #expect(version == "0.57.1")
+            if case .downloadFailed(let tool, let version, let statusCode) = error {
+                #expect(tool == .swa)
+                #expect(version == "0.1.0")
                 #expect(statusCode == 404)
             } else {
                 Issue.record("Wrong error type: \(error)")
@@ -214,15 +205,15 @@ struct BinaryManagerTests {
         let manager = createManager(
             fileSystem: fileSystem,
             networkSession: networkSession,
-            extractor: extractor,
+            extractor: extractor
         )
 
         do {
-            _ = try await manager.ensureBinary(for: .swiftformat, version: "0.54.6")
+            _ = try await manager.ensureBinary(for: .swa, version: "0.1.0")
             Issue.record("Expected error to be thrown")
         } catch let error as BinaryManagerError {
-            if case let .extractionFailed(tool, _) = error {
-                #expect(tool == .swiftformat)
+            if case .extractionFailed(let tool, _) = error {
+                #expect(tool == .swa)
             } else {
                 Issue.record("Wrong error type: \(error)")
             }
@@ -243,15 +234,15 @@ struct BinaryManagerTests {
         let manager = createManager(
             fileSystem: fileSystem,
             networkSession: networkSession,
-            extractor: extractor,
+            extractor: extractor
         )
 
         do {
-            _ = try await manager.ensureBinary(for: .swiftformat, version: "0.54.6")
+            _ = try await manager.ensureBinary(for: .swa, version: "0.1.0")
             Issue.record("Expected error to be thrown")
         } catch let error as BinaryManagerError {
-            if case let .binaryNotFound(tool, _) = error {
-                #expect(tool == .swiftformat)
+            if case .binaryNotFound(let tool, _) = error {
+                #expect(tool == .swa)
             } else {
                 Issue.record("Wrong error type: \(error)")
             }
@@ -267,11 +258,11 @@ struct BinaryManagerTests {
         let fileSystem = MockFileSystem()
         let manager = createManager(fileSystem: fileSystem)
 
-        let binaryPath = await manager.binaryPath(for: .swiftlint, version: "0.57.1")
+        let binaryPath = await manager.binaryPath(for: .swa, version: "0.1.0")
         let versionDir = binaryPath.deletingLastPathComponent()
         fileSystem.addExistingPath(versionDir.path)
 
-        try await manager.clearCache(for: .swiftlint, version: "0.57.1")
+        try await manager.clearCache(for: .swa, version: "0.1.0")
 
         #expect(fileSystem.removedItems.contains(versionDir))
     }
@@ -294,7 +285,7 @@ struct BinaryManagerTests {
         let fileSystem = MockFileSystem()
         let manager = createManager(fileSystem: fileSystem)
 
-        try await manager.clearCache(for: .swiftlint, version: "0.57.1")
+        try await manager.clearCache(for: .swa, version: "0.1.0")
 
         #expect(fileSystem.removedItems.isEmpty)
     }
@@ -306,13 +297,13 @@ struct BinaryManagerTests {
     private func createManager(
         fileSystem: MockFileSystem = MockFileSystem(),
         networkSession: MockNetworkSession = MockNetworkSession(),
-        extractor: MockArchiveExtractor = MockArchiveExtractor(),
+        extractor: MockArchiveExtractor = MockArchiveExtractor()
     ) -> BinaryManager {
         BinaryManager(
             cacheDirectory: cacheDirectory,
             fileSystem: fileSystem,
             networkSession: networkSession,
-            archiveExtractor: extractor,
+            archiveExtractor: extractor
         )
     }
 }

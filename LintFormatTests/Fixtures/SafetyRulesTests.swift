@@ -1,18 +1,20 @@
-// MARK: - Safety Rules Test Fixtures (SwiftLint Only)
-// Tests rules that ONLY exist in SwiftLint (no SwiftFormat equivalent)
+// MARK: - Safety Rules Test Fixtures
+// Tests rules that detect unsafe Swift patterns
 //
-// Run: swiftlint lint SafetyRulesTests.swift
+// NOTE: This file intentionally contains code that violates safety rules
+// to test that our linting configuration catches these issues.
+// swift-format-ignore-file
 
 import Foundation
 
-// MARK: - Test Case 1: Force Unwrapping (force_unwrapping)
+// MARK: - Test Case 1: Force Unwrapping (NeverForceUnwrap)
 
 enum ForceUnwrapTests {
 
     // BAD: Force unwrapping - DANGEROUS
     static func badExample() -> String {
         let optional: String? = "value"
-        return optional! // swiftlint:disable:this force_unwrapping
+        return optional!
     }
 
     // GOOD: Safe unwrapping with guard
@@ -31,12 +33,11 @@ enum ForceUnwrapTests {
     }
 }
 
-// MARK: - Test Case 2: Implicitly Unwrapped Optionals (implicitly_unwrapped_optional)
+// MARK: - Test Case 2: Implicitly Unwrapped Optionals (NeverUseImplicitlyUnwrappedOptionals)
 
 final class ImplicitUnwrapTests {
 
     // BAD: Implicitly unwrapped optional
-    // swiftlint:disable:next implicitly_unwrapped_optional
     var badProperty: String!
 
     // GOOD: Regular optional
@@ -49,14 +50,13 @@ final class ImplicitUnwrapTests {
     // @IBOutlet weak var button: UIButton!
 }
 
-// MARK: - Test Case 3: Force Cast (force_cast)
+// MARK: - Test Case 3: Force Cast (NeverForceUnwrap covers this)
 
 enum ForceCastTests {
 
     // BAD: Force cast - can crash
     static func badExample(_ any: Any) -> String {
-        // swiftlint:disable:next force_cast
-        return any as! String
+        any as! String
     }
 
     // GOOD: Safe cast with guard
@@ -68,14 +68,13 @@ enum ForceCastTests {
     }
 }
 
-// MARK: - Test Case 4: Force Try (force_try)
+// MARK: - Test Case 4: Force Try (NeverUseForceTry)
 
 enum ForceTryTests {
 
     // BAD: Force try - can crash
     static func badExample() -> Data {
-        // swiftlint:disable:next force_try
-        return try! Data(contentsOf: URL(fileURLWithPath: "/tmp/file"))
+        try! Data(contentsOf: URL(fileURLWithPath: "/tmp/file"))
     }
 
     // GOOD: Proper error handling
@@ -101,30 +100,47 @@ enum ForceTryTests {
     }
 }
 
-// MARK: - Test Case 5: Cyclomatic Complexity (cyclomatic_complexity)
+// MARK: - Test Case 5: Cyclomatic Complexity
 
 enum ComplexityTests {
 
-    // BAD: High cyclomatic complexity (warning at 15, error at 25)
-    // swiftlint:disable:next cyclomatic_complexity
+    // BAD: High cyclomatic complexity
     static func tooComplex(value: Int) -> String {
-        if value == 1 { return "one" }
-        else if value == 2 { return "two" }
-        else if value == 3 { return "three" }
-        else if value == 4 { return "four" }
-        else if value == 5 { return "five" }
-        else if value == 6 { return "six" }
-        else if value == 7 { return "seven" }
-        else if value == 8 { return "eight" }
-        else if value == 9 { return "nine" }
-        else if value == 10 { return "ten" }
-        else if value == 11 { return "eleven" }
-        else if value == 12 { return "twelve" }
-        else if value == 13 { return "thirteen" }
-        else if value == 14 { return "fourteen" }
-        else if value == 15 { return "fifteen" }
-        else if value == 16 { return "sixteen" }
-        else { return "other" }
+        if value == 1 {
+            return "one"
+        } else if value == 2 {
+            return "two"
+        } else if value == 3 {
+            return "three"
+        } else if value == 4 {
+            return "four"
+        } else if value == 5 {
+            return "five"
+        } else if value == 6 {
+            return "six"
+        } else if value == 7 {
+            return "seven"
+        } else if value == 8 {
+            return "eight"
+        } else if value == 9 {
+            return "nine"
+        } else if value == 10 {
+            return "ten"
+        } else if value == 11 {
+            return "eleven"
+        } else if value == 12 {
+            return "twelve"
+        } else if value == 13 {
+            return "thirteen"
+        } else if value == 14 {
+            return "fourteen"
+        } else if value == 15 {
+            return "fifteen"
+        } else if value == 16 {
+            return "sixteen"
+        } else {
+            return "other"
+        }
     }
 
     // GOOD: Use switch or dictionary lookup
@@ -138,12 +154,12 @@ enum ComplexityTests {
     }
 }
 
-// MARK: - Test Case 6: Function Body Length (function_body_length)
+// MARK: - Test Case 6: Function Body Length
 
 // Config: warning at 50 lines, error at 100 lines
 // Long functions should be broken into smaller, focused functions
 
-// MARK: - Test Case 7: Unowned Variable Capture (unowned_variable_capture)
+// MARK: - Test Case 7: Unowned Variable Capture
 
 final class UnownedCaptureTests {
 
@@ -151,7 +167,6 @@ final class UnownedCaptureTests {
 
     // BAD: unowned can cause crashes if self is deallocated
     func badExample() {
-        // swiftlint:disable:next unowned_variable_capture
         handler = { [unowned self] in
             print(self)
         }
@@ -168,11 +183,10 @@ final class UnownedCaptureTests {
 
 // MARK: - Expected Behavior
 //
-// These rules are SwiftLint-only and CRITICAL for code safety.
-// SwiftFormat cannot detect these issues - they are semantic, not stylistic.
+// These rules are CRITICAL for code safety.
+// swift-format detects these issues via NeverForceUnwrap, NeverUseForceTry,
+// and NeverUseImplicitlyUnwrappedOptionals rules.
 //
 // RECOMMENDATION:
-// 1. Keep ALL safety rules enabled in SwiftLint
-// 2. Set force_unwrapping to ERROR level, not WARNING
-// 3. Keep cyclomatic_complexity thresholds (15/25) reasonable
-// 4. Keep function_body_length thresholds (50/100) to encourage small functions
+// 1. Keep ALL safety rules enabled
+// 2. Use swift-format-ignore sparingly and only with justification

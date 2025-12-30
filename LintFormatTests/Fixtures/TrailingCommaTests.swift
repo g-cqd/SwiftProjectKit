@@ -21,7 +21,7 @@ enum TrailingCommaTests {
     static let colorsBad = [
         "red",
         "green",
-        "blue"
+        "blue",
     ]
 
     // MARK: - Test Case 2: Single-Line Array (No Trailing Comma)
@@ -30,7 +30,7 @@ enum TrailingCommaTests {
     static let singleLineGood = ["a", "b", "c"]
 
     // BAD: Trailing comma in single-line (looks odd)
-    static let singleLineBad = ["a", "b", "c",]
+    static let singleLineBad = ["a", "b", "c"]
 
     // MARK: - Test Case 3: Multiline Dictionary
 
@@ -45,7 +45,7 @@ enum TrailingCommaTests {
     static let configBad: [String: Any] = [
         "key1": "value1",
         "key2": "value2",
-        "key3": "value3"
+        "key3": "value3",
     ]
 
     // MARK: - Test Case 4: Function Parameters (Multiline)
@@ -78,7 +78,7 @@ enum TrailingCommaTests {
 
     // MARK: - Test Case 6: Closure with Capture List
 
-    static let closureExample = { [weak self, count = 5,] in
+    static let closureExample = { [weak self, count = 5, ] in
         print("Captured")
     }
 }

@@ -1,9 +1,7 @@
-// swiftlint:disable no_print_statements
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
 
-// swiftlint:disable type_body_length
 struct InitCommand: AsyncParsableCommand {
     // MARK: Internal
 
@@ -27,11 +25,8 @@ struct InitCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Output directory (defaults to current)")
     var output: String = "."
 
-    @Flag(name: .long, help: "Skip SwiftLint configuration")
-    var noSwiftlint = false
-
-    @Flag(name: .long, help: "Skip SwiftFormat configuration")
-    var noSwiftformat = false
+    @Flag(name: .long, help: "Skip swift-format configuration")
+    var noFormat = false
 
     @Flag(name: .long, help: "Skip GitHub workflows")
     var noWorkflows = false
@@ -55,8 +50,6 @@ struct InitCommand: AsyncParsableCommand {
 
     // MARK: Private
 
-    // swa:ignore
-    // swiftlint:disable function_body_length
     private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
@@ -107,28 +100,16 @@ struct InitCommand: AsyncParsableCommand {
         )
     }
 
-    // swiftlint:enable function_body_length
-
-    // swiftlint:disable:next function_body_length
     private func createConfigurationFiles(at outputURL: URL) throws {
         let fm = FileManager.default
 
-        if !noSwiftlint {
-            try generateSwiftLintConfig().write(
-                to: outputURL.appendingPathComponent(".swiftlint.yml"),
+        if !noFormat {
+            try DefaultConfigs.swiftFormat.write(
+                to: outputURL.appendingPathComponent(".swift-format"),
                 atomically: true,
                 encoding: .utf8,
             )
-            print("  Created .swiftlint.yml")
-        }
-
-        if !noSwiftformat {
-            try generateSwiftFormatConfig().write(
-                to: outputURL.appendingPathComponent(".swiftformat"),
-                atomically: true,
-                encoding: .utf8,
-            )
-            print("  Created .swiftformat")
+            print("  Created .swift-format")
         }
 
         if !noWorkflows {
@@ -232,7 +213,6 @@ struct InitCommand: AsyncParsableCommand {
 
     // MARK: - Generators
 
-    // swiftlint:disable:next function_body_length
     private func generatePackageSwift(name: String, isApp: Bool) -> String {
         if isApp {
             """
@@ -254,7 +234,7 @@ struct InitCommand: AsyncParsableCommand {
                         name: "\(name)",
                         dependencies: [],
                         plugins: [
-                            .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
+                            .plugin(name: "SwiftFormatBuildPlugin", package: "SwiftProjectKit"),
                         ]
                     ),
                     .testTarget(
@@ -290,7 +270,7 @@ struct InitCommand: AsyncParsableCommand {
                         name: "\(name)",
                         dependencies: [],
                         plugins: [
-                            .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
+                            .plugin(name: "SwiftFormatBuildPlugin", package: "SwiftProjectKit"),
                         ]
                     ),
                     .testTarget(
@@ -301,14 +281,6 @@ struct InitCommand: AsyncParsableCommand {
             )
             """
         }
-    }
-
-    private func generateSwiftLintConfig() -> String {
-        DefaultConfigs.swiftlint
-    }
-
-    private func generateSwiftFormatConfig() -> String {
-        DefaultConfigs.swiftformat
     }
 
     private func generateCIWorkflow(name: String, platforms: PlatformConfiguration) -> String {

@@ -1,4 +1,3 @@
-// swiftlint:disable no_print_statements type_body_length
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
@@ -24,16 +23,13 @@ struct SyncCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Skip code formatting fixes")
     var skipFormat = false
 
-    @Flag(name: .long, help: "Skip linting fixes")
-    var skipLint = false
-
     @Flag(name: .long, help: "Verbose output")
     var verbose = false
 
     func run() async throws {
         let projectURL = URL(fileURLWithPath: path).standardizedFileURL
 
-        print("🔄 Syncing project at \(projectURL.path)\(dryRun ? " (dry run)" : "")...\n")
+        print("Syncing project at \(projectURL.path)\(dryRun ? " (dry run)" : "")...\n")
 
         var changes: [String] = []
         var fixes: [String] = []
@@ -41,11 +37,11 @@ struct SyncCommand: AsyncParsableCommand {
         // Detect project type and name
         let projectInfo = detectProjectInfo(at: projectURL)
 
-        print("📦 Project: \(projectInfo.name)")
+        print("Project: \(projectInfo.name)")
         print("   Type: \(projectInfo.isSwiftPackage ? "Swift Package" : "Xcode Project")\n")
 
         // Check and create missing config files
-        print("📋 Checking configuration files...")
+        print("Checking configuration files...")
         try checkAndCreateConfigFiles(at: projectURL, projectName: projectInfo.name, changes: &changes)
 
         // Update dependencies
@@ -53,16 +49,10 @@ struct SyncCommand: AsyncParsableCommand {
             try await updateDependencies(at: projectURL, fixes: &fixes)
         }
 
-        // Run SwiftFormat
-        let swiftformatPath = projectURL.appendingPathComponent(".swiftformat")
+        // Run swift-format
+        let swiftFormatConfigPath = projectURL.appendingPathComponent(".swift-format")
         if !skipFormat, !dryRun {
-            try await runSwiftFormat(at: projectURL, configPath: swiftformatPath, fixes: &fixes)
-        }
-
-        // Run SwiftLint
-        let swiftlintPath = projectURL.appendingPathComponent(".swiftlint.yml")
-        if !skipLint, !dryRun {
-            try await runSwiftLint(at: projectURL, configPath: swiftlintPath, fixes: &fixes)
+            try await runSwiftFormat(at: projectURL, configPath: swiftFormatConfigPath, fixes: &fixes)
         }
 
         // Print summary
@@ -95,8 +85,8 @@ struct SyncCommand: AsyncParsableCommand {
         let content = try String(contentsOf: packageSwiftPath, encoding: .utf8)
         let pattern = #"name:\s*"([^"]+)""#
         guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
-              let range = Range(match.range(at: 1), in: content)
+            let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
+            let range = Range(match.range(at: 1), in: content)
         else {
             return nil
         }
@@ -111,7 +101,6 @@ struct SyncCommand: AsyncParsableCommand {
         changes: inout [String],
     ) throws {
         try checkOrCreateGitignore(at: projectURL, changes: &changes)
-        try checkOrCreateSwiftLintConfig(at: projectURL, changes: &changes)
         try checkOrCreateSwiftFormatConfig(at: projectURL, changes: &changes)
         try checkOrCreateClaudeMd(at: projectURL, changes: &changes)
         // CI workflow includes release support (unified CI/CD)
@@ -128,22 +117,12 @@ struct SyncCommand: AsyncParsableCommand {
         )
     }
 
-    private func checkOrCreateSwiftLintConfig(at projectURL: URL, changes: inout [String]) throws {
-        let filePath = projectURL.appendingPathComponent(".swiftlint.yml")
-        try checkOrCreateConfigFile(
-            at: filePath,
-            content: DefaultConfigs.swiftlint,
-            fileName: ".swiftlint.yml",
-            changes: &changes,
-        )
-    }
-
     private func checkOrCreateSwiftFormatConfig(at projectURL: URL, changes: inout [String]) throws {
-        let filePath = projectURL.appendingPathComponent(".swiftformat")
+        let filePath = projectURL.appendingPathComponent(".swift-format")
         try checkOrCreateConfigFile(
             at: filePath,
-            content: DefaultConfigs.swiftformat,
-            fileName: ".swiftformat",
+            content: DefaultConfigs.swiftFormat,
+            fileName: ".swift-format",
             changes: &changes,
         )
     }
@@ -186,7 +165,7 @@ struct SyncCommand: AsyncParsableCommand {
 
         if fileManager.fileExists(atPath: filePath.path) {
             if verbose {
-                print("   ✓ \(fileName) exists")
+                print("   + \(fileName) exists")
             }
             return
         }
@@ -208,60 +187,93 @@ struct SyncCommand: AsyncParsableCommand {
     // MARK: - Dependency Updates
 
     private func updateDependencies(at projectURL: URL, fixes: inout [String]) async throws {
-        print("\n📦 Updating dependencies...")
+        print("\nUpdating dependencies...")
         let updateResult = try await runCommand("swift", arguments: ["package", "update"], in: projectURL)
         if updateResult.exitCode == 0 {
             fixes.append("Updated package dependencies")
         } else if verbose {
-            print("   ⚠ Dependency update had issues")
+            print("   ! Dependency update had issues")
         }
     }
 
     // MARK: - Tool Execution
 
     private func runSwiftFormat(at projectURL: URL, configPath: URL, fixes: inout [String]) async throws {
-        print("\n🎨 Running SwiftFormat...")
-        let success = try await runToolWithFallback(
-            primaryPath: "swiftformat",
-            fallbackPath: "/opt/homebrew/bin/swiftformat",
-            arguments: [".", "--config", configPath.path],
-            in: projectURL,
-        )
-        if success {
-            fixes.append("Applied SwiftFormat fixes")
+        print("\nRunning swift-format...")
+
+        // Find swift-format via xcrun
+        let swiftFormatPath: URL
+        do {
+            swiftFormatPath = try findSwiftFormat()
+        } catch {
+            if verbose {
+                print("   ! swift-format not found")
+            }
+            return
+        }
+
+        var arguments = ["format", "--in-place", "--parallel", "--recursive"]
+
+        if FileManager.default.fileExists(atPath: configPath.path) {
+            arguments += ["--configuration", configPath.path]
+        }
+
+        arguments.append(projectURL.path)
+
+        let result = try await runCommand(swiftFormatPath.path, arguments: arguments, in: projectURL)
+        if result.exitCode == 0 {
+            fixes.append("Applied swift-format fixes")
         } else if verbose {
-            print("   ⚠ SwiftFormat not found or failed")
+            print("   ! swift-format failed")
         }
     }
 
-    private func runSwiftLint(at projectURL: URL, configPath: URL, fixes: inout [String]) async throws {
-        print("\n🔍 Running SwiftLint with auto-fix...")
-        let success = try await runToolWithFallback(
-            primaryPath: "swiftlint",
-            fallbackPath: "/opt/homebrew/bin/swiftlint",
-            arguments: ["lint", "--fix", "--config", configPath.path],
-            in: projectURL,
-        )
-        if success {
-            fixes.append("Applied SwiftLint auto-fixes")
-        } else if verbose {
-            print("   ⚠ SwiftLint not found or failed")
-        }
-    }
+    private func findSwiftFormat() throws -> URL {
+        let searchPaths = [
+            "/opt/homebrew/bin/swift-format",
+            "/usr/local/bin/swift-format",
+            "/usr/bin/swift-format",
+        ]
 
-    private func runToolWithFallback(
-        primaryPath: String,
-        fallbackPath: String,
-        arguments: [String],
-        in directory: URL,
-    ) async throws -> Bool {
-        let primaryResult = try await runCommand(primaryPath, arguments: arguments, in: directory)
-        if primaryResult.exitCode == 0 {
-            return true
+        for path in searchPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return URL(fileURLWithPath: path)
+            }
         }
 
-        let fallbackResult = try await runCommand(fallbackPath, arguments: arguments, in: directory)
-        return fallbackResult.exitCode == 0
+        // Try xcrun
+        let xcrunURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        let pipe = Pipe()
+
+        let process = Process()
+        process.executableURL = xcrunURL
+        process.arguments = ["--find", "swift-format"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw NSError(
+                domain: "SyncCommand",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "swift-format not found"]
+            )
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !path.isEmpty
+        else {
+            throw NSError(
+                domain: "SyncCommand",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "swift-format not found"]
+            )
+        }
+
+        return URL(fileURLWithPath: path)
     }
 
     private func runCommand(
@@ -294,19 +306,19 @@ struct SyncCommand: AsyncParsableCommand {
     // MARK: - Summary
 
     private func printSummary(changes: [String], fixes: [String]) {
-        print("\n" + String(repeating: "─", count: 50))
-        print("📊 Sync Summary")
-        print(String(repeating: "─", count: 50))
+        print("\n" + String(repeating: "-", count: 50))
+        print("Sync Summary")
+        print(String(repeating: "-", count: 50))
 
         if changes.isEmpty, fixes.isEmpty {
-            print("✅ Project is already in sync!")
+            print("Project is already in sync!")
         } else {
             printChangesSection(changes)
             printFixesSection(fixes)
         }
 
         if dryRun {
-            print("\n💡 Run without --dry-run to apply changes")
+            print("\nRun without --dry-run to apply changes")
         }
 
         print()
@@ -315,18 +327,18 @@ struct SyncCommand: AsyncParsableCommand {
     private func printChangesSection(_ changes: [String]) {
         guard !changes.isEmpty else { return }
 
-        print("\n📁 Configuration changes:")
+        print("\nConfiguration changes:")
         for change in changes {
-            print("   • \(change)")
+            print("   - \(change)")
         }
     }
 
     private func printFixesSection(_ fixes: [String]) {
         guard !fixes.isEmpty else { return }
 
-        print("\n🔧 Fixes applied:")
+        print("\nFixes applied:")
         for fix in fixes {
-            print("   • \(fix)")
+            print("   - \(fix)")
         }
     }
 }

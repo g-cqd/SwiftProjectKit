@@ -13,7 +13,6 @@ struct SPK: AsyncParsableCommand {
             InitCommand.self,
             SyncCommand.self,
             UpdateCommand.self,
-            LintCommand.self,
             FormatCommand.self,
             WorkflowCommand.self,
         ],

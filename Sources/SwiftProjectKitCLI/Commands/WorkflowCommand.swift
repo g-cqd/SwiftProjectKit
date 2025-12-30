@@ -11,7 +11,7 @@ struct WorkflowCommand: AsyncParsableCommand {
         commandName: "workflow",
         abstract: "Manage GitHub Actions workflows",
         subcommands: [
-            GenerateWorkflowCommand.self,
+            GenerateWorkflowCommand.self
         ],
         defaultSubcommand: GenerateWorkflowCommand.self,
     )
@@ -61,7 +61,8 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
 
         if name == nil, FileManager.default.fileExists(atPath: packageSwiftPath.path) {
             if let content = try? String(contentsOf: packageSwiftPath, encoding: .utf8),
-               let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression) {
+                let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression)
+            {
                 let fullMatch = content[match]
                 if let nameMatch = fullMatch.range(of: #""([^"]+)""#, options: .regularExpression) {
                     projectName = String(fullMatch[nameMatch].dropFirst().dropLast())

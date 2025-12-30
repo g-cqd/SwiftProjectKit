@@ -12,8 +12,9 @@
 // Invalid versions cause build failures and incorrect configurations.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("SwiftProjectKitCore Module Tests")
 struct SwiftProjectKitCoreModuleTests {

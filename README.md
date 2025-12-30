@@ -1,13 +1,13 @@
 # SwiftProjectKit
 
-Centralized, opinionated Swift project tooling for g-cqd's projects.
+Centralized, opinionated Swift project tooling for g-cqd's projects. Uses apple/swift-format for code formatting.
 
 ## Features
 
-- **SwiftLint Integration** - Build and command plugins with automatic binary download
-- **SwiftFormat Integration** - Build and command plugins with automatic binary download
+- **swift-format Integration** - Build and command plugins using Xcode's built-in swift-format
 - **CLI Tool (`spk`)** - Project scaffolding, sync, and management
 - **GitHub Workflow Templates** - Platform-aware CI/CD generation with release support
+- **Static Analysis (SWA)** - Unused code and duplication detection plugins
 - **Xcode Support** - All plugins work with both SPM and Xcode projects
 
 ## Installation
@@ -28,7 +28,6 @@ Add plugins to your targets:
 .target(
     name: "MyTarget",
     plugins: [
-        .plugin(name: "SwiftLintBuildPlugin", package: "SwiftProjectKit"),
         .plugin(name: "SwiftFormatBuildPlugin", package: "SwiftProjectKit"),
     ]
 )
@@ -39,11 +38,11 @@ Add plugins to your targets:
 Run on-demand:
 
 ```bash
-# Lint code
-swift package --allow-network-connections all lint
-
 # Format code
-swift package --allow-writing-to-package-directory format-source-code
+swift package format-source-code
+
+# Check formatting (lint mode)
+swift package format-source-code --lint
 ```
 
 ## CLI Tool (`spk`)
@@ -83,8 +82,7 @@ spk init --name <name> [options]
 | `--name`, `-n` | Project name (required) | - |
 | `--type`, `-t` | Project type: `package` or `app` | `package` |
 | `--output` | Output directory | Current directory |
-| `--no-swiftlint` | Skip SwiftLint configuration | `false` |
-| `--no-swiftformat` | Skip SwiftFormat configuration | `false` |
+| `--no-format` | Skip swift-format configuration | `false` |
 | `--no-workflows` | Skip GitHub workflows | `false` |
 | `--no-claude` | Skip CLAUDE.md | `false` |
 
@@ -115,15 +113,13 @@ spk sync [options]
 | `--dry-run` | Preview changes without applying | `false` |
 | `--skip-deps` | Skip dependency updates | `false` |
 | `--skip-format` | Skip code formatting | `false` |
-| `--skip-lint` | Skip linting fixes | `false` |
 | `--verbose` | Show detailed output | `false` |
 
 **What `sync` does:**
 1. Detects project type (Swift Package or Xcode)
-2. Creates missing config files (`.swiftlint.yml`, `.swiftformat`, `.gitignore`, `CLAUDE.md`, CI workflow)
+2. Creates missing config files (`.swift-format`, `.gitignore`, `CLAUDE.md`, CI workflow)
 3. Updates package dependencies
-4. Runs SwiftFormat to fix formatting
-5. Runs SwiftLint with auto-fix
+4. Runs swift-format to fix formatting
 
 **Examples:**
 
@@ -153,8 +149,7 @@ spk update [options]
 |--------|-------------|---------|
 | `--path`, `-p` | Path to project | Current directory |
 | `--all` | Update all configurations | `false` |
-| `--swiftlint` | Update SwiftLint rules | `false` |
-| `--swiftformat` | Update SwiftFormat rules | `false` |
+| `--format` | Update swift-format rules | `false` |
 | `--workflows` | Update GitHub workflows | `false` |
 | `--claude` | Update CLAUDE.md | `false` |
 | `--dry-run` | Preview changes without applying | `false` |
@@ -165,43 +160,16 @@ spk update [options]
 # Update everything
 spk update --all
 
-# Update only linting configs
-spk update --swiftlint --swiftformat
+# Update only format config
+spk update --format
 
 # Preview workflow updates
 spk update --workflows --dry-run
 ```
 
-#### `spk lint` - Run SwiftLint
+#### `spk format` - Run swift-format
 
-Run SwiftLint on the project. Automatically downloads SwiftLint if not cached.
-
-```bash
-spk lint [options]
-```
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--path`, `-p` | Path to lint | Current directory |
-| `--fix` | Automatically fix violations | `false` |
-| `--strict` | Fail on warnings | `false` |
-
-**Examples:**
-
-```bash
-# Lint current project
-spk lint
-
-# Lint and auto-fix
-spk lint --fix
-
-# Strict mode for CI
-spk lint --strict
-```
-
-#### `spk format` - Run SwiftFormat
-
-Run SwiftFormat on the project. Automatically downloads SwiftFormat if not cached.
+Run swift-format on the project using Xcode's built-in toolchain.
 
 ```bash
 spk format [options]
@@ -265,10 +233,10 @@ spk workflow generate --force
 |---------|------|-------------|
 | `SwiftProjectKitCore` | Library | Configuration models, templates, and binary management |
 | `spk` | Executable | CLI tool for project management |
-| `SwiftLintBuildPlugin` | Build Plugin | Run SwiftLint automatically on builds |
-| `SwiftFormatBuildPlugin` | Build Plugin | Run SwiftFormat automatically on builds |
-| `SwiftLintCommandPlugin` | Command Plugin | On-demand linting via `swift package` |
+| `SwiftFormatBuildPlugin` | Build Plugin | Run swift-format automatically on builds |
 | `SwiftFormatCommandPlugin` | Command Plugin | On-demand formatting via `swift package` |
+| `SWABuildPlugin` | Build Plugin | Run static analysis on builds |
+| `SWACommandPlugin` | Command Plugin | On-demand static analysis |
 
 ## Configuration
 
@@ -287,14 +255,8 @@ Optional configuration file for customizing SwiftProjectKit behavior:
     "tvOS": null,
     "visionOS": null
   },
-  "swiftlint": {
-    "enabled": true,
-    "version": "0.57.1",
-    "configPath": null
-  },
   "swiftformat": {
     "enabled": true,
-    "version": "0.54.6",
     "configPath": null
   },
   "workflows": {
@@ -305,13 +267,25 @@ Optional configuration file for customizing SwiftProjectKit behavior:
 }
 ```
 
-### SwiftLint (`.swiftlint.yml`)
+### swift-format (`.swift-format`)
 
-Place in project root. If not present, `spk` uses built-in defaults optimized for modern Swift.
+Place in project root. This is a JSON configuration file for apple/swift-format. If not present, `spk` uses built-in defaults optimized for modern Swift:
 
-### SwiftFormat (`.swiftformat`)
-
-Place in project root. If not present, `spk` uses built-in defaults aligned with SwiftLint rules.
+```json
+{
+  "version": 1,
+  "lineLength": 120,
+  "indentation": { "spaces": 4 },
+  "tabWidth": 4,
+  "maximumBlankLines": 1,
+  "rules": {
+    "NeverForceUnwrap": true,
+    "NeverUseForceTry": true,
+    "OrderedImports": true,
+    "UseEarlyExits": true
+  }
+}
+```
 
 ## Architecture
 
@@ -319,16 +293,20 @@ Place in project root. If not present, `spk` uses built-in defaults aligned with
 SwiftProjectKit/
 ├── Sources/
 │   ├── SwiftProjectKitCore/     # Shared library
-│   │   ├── BinaryManagement/    # Tool download & caching
+│   │   ├── BinaryManagement/    # SWA tool download & caching
 │   │   ├── Configuration/       # Project config models
 │   │   └── Templates/           # Default configs & workflows
 │   └── SwiftProjectKitCLI/      # CLI executable
 │       └── Commands/            # CLI commands
 └── Plugins/                     # SPM plugins
-    ├── SwiftLintBuildPlugin/
-    ├── SwiftLintCommandPlugin/
     ├── SwiftFormatBuildPlugin/
-    └── SwiftFormatCommandPlugin/
+    ├── SwiftFormatCommandPlugin/
+    ├── SWABuildPlugin/
+    ├── SWACommandPlugin/
+    ├── UnusedCodeBuildPlugin/
+    ├── UnusedCodeCommandPlugin/
+    ├── DuplicationBuildPlugin/
+    └── DuplicationCommandPlugin/
 ```
 
 ## Requirements

@@ -13,8 +13,9 @@
 // or asset names cause download failures and break builds.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("ManagedTool Tests")
 struct ManagedToolTests {
@@ -30,32 +31,25 @@ struct ManagedToolTests {
             let parts = repo.split(separator: "/")
             #expect(
                 parts.count == 2,
-                "Repository '\(repo)' should be in 'owner/repo' format",
+                "Repository '\(repo)' should be in 'owner/repo' format"
             )
 
             #expect(
                 !parts[0].isEmpty,
-                "Repository '\(repo)' owner should not be empty",
+                "Repository '\(repo)' owner should not be empty"
             )
             #expect(
                 !parts[1].isEmpty,
-                "Repository '\(repo)' name should not be empty",
+                "Repository '\(repo)' name should not be empty"
             )
         }
     }
 
-    @Test("SwiftLint has correct repository")
-    func swiftLintRepository() {
-        let tool = ManagedTool.swiftlint
+    @Test("SWA has correct repository")
+    func swaRepository() {
+        let tool = ManagedTool.swa
 
-        #expect(tool.repository == "realm/SwiftLint")
-    }
-
-    @Test("SwiftFormat has correct repository")
-    func swiftFormatRepository() {
-        let tool = ManagedTool.swiftformat
-
-        #expect(tool.repository == "nicklockwood/SwiftFormat")
+        #expect(tool.repository == "nicklockwood/SwiftStaticAnalysis")
     }
 
     // MARK: - Binary Names
@@ -72,19 +66,14 @@ struct ManagedToolTests {
         for tool in ManagedTool.allCases {
             #expect(
                 tool.binaryName == tool.rawValue,
-                "Binary name should match raw value for \(tool)",
+                "Binary name should match raw value for \(tool)"
             )
         }
     }
 
-    @Test("SwiftLint binary name is swiftlint")
-    func swiftLintBinaryName() {
-        #expect(ManagedTool.swiftlint.binaryName == "swiftlint")
-    }
-
-    @Test("SwiftFormat binary name is swiftformat")
-    func swiftFormatBinaryName() {
-        #expect(ManagedTool.swiftformat.binaryName == "swiftformat")
+    @Test("SWA binary name is swa")
+    func swaBinaryName() {
+        #expect(ManagedTool.swa.binaryName == "swa")
     }
 
     // MARK: - Default Versions
@@ -94,7 +83,7 @@ struct ManagedToolTests {
         for tool in ManagedTool.allCases {
             #expect(
                 !tool.defaultVersion.isEmpty,
-                "\(tool) should have non-empty default version",
+                "\(tool) should have non-empty default version"
             )
         }
     }
@@ -112,39 +101,25 @@ struct ManagedToolTests {
 
             #expect(
                 match != nil,
-                "Version '\(version)' for \(tool) should be semantic versioning (X.Y or X.Y.Z)",
+                "Version '\(version)' for \(tool) should be semantic versioning (X.Y or X.Y.Z)"
             )
         }
     }
 
-    @Test("SwiftLint default version is pinned")
-    func swiftLintDefaultVersion() {
-        let version = ManagedTool.swiftlint.defaultVersion
+    @Test("SWA default version is pinned")
+    func swaDefaultVersion() {
+        let version = ManagedTool.swa.defaultVersion
 
-        #expect(version == "0.57.1", "SwiftLint should be pinned to 0.57.1")
-    }
-
-    @Test("SwiftFormat default version is pinned")
-    func swiftFormatDefaultVersion() {
-        let version = ManagedTool.swiftformat.defaultVersion
-
-        #expect(version == "0.54.6", "SwiftFormat should be pinned to 0.54.6")
+        #expect(version == "0.1.0", "SWA should be pinned to 0.1.0")
     }
 
     // MARK: - Asset Names
 
-    @Test("SwiftLint asset name is portable_swiftlint.zip")
-    func swiftLintAssetName() {
-        let assetName = ManagedTool.swiftlint.assetName(for: "1.0.0")
+    @Test("SWA asset name is swa.zip")
+    func swaAssetName() {
+        let assetName = ManagedTool.swa.assetName(for: "1.0.0")
 
-        #expect(assetName == "portable_swiftlint.zip")
-    }
-
-    @Test("SwiftFormat asset name is swiftformat.zip")
-    func swiftFormatAssetName() {
-        let assetName = ManagedTool.swiftformat.assetName(for: "1.0.0")
-
-        #expect(assetName == "swiftformat.zip")
+        #expect(assetName == "swa.zip")
     }
 
     @Test("Asset names are consistent across versions")
@@ -159,26 +134,15 @@ struct ManagedToolTests {
 
     // MARK: - Download URLs
 
-    @Test("SwiftLint download URL is correctly constructed")
-    func swiftLintDownloadURL() {
-        let tool = ManagedTool.swiftlint
-        let url = tool.downloadURL(for: "0.57.1")
+    @Test("SWA download URL is correctly constructed")
+    func swaDownloadURL() {
+        let tool = ManagedTool.swa
+        let url = tool.downloadURL(for: "0.1.0")
 
         #expect(url.absoluteString.contains("github.com"))
-        #expect(url.absoluteString.contains("realm/SwiftLint"))
-        #expect(url.absoluteString.contains("0.57.1"))
-        #expect(url.absoluteString.contains("portable_swiftlint.zip"))
-    }
-
-    @Test("SwiftFormat download URL is correctly constructed")
-    func swiftFormatDownloadURL() {
-        let tool = ManagedTool.swiftformat
-        let url = tool.downloadURL(for: "0.54.6")
-
-        #expect(url.absoluteString.contains("github.com"))
-        #expect(url.absoluteString.contains("nicklockwood/SwiftFormat"))
-        #expect(url.absoluteString.contains("0.54.6"))
-        #expect(url.absoluteString.contains("swiftformat.zip"))
+        #expect(url.absoluteString.contains("nicklockwood/SwiftStaticAnalysis"))
+        #expect(url.absoluteString.contains("0.1.0"))
+        #expect(url.absoluteString.contains("swa.zip"))
     }
 
     @Test("Download URLs are HTTPS")
@@ -188,7 +152,7 @@ struct ManagedToolTests {
 
             #expect(
                 url.scheme == "https",
-                "Download URL for \(tool) should use HTTPS",
+                "Download URL for \(tool) should use HTTPS"
             )
         }
     }
@@ -200,7 +164,7 @@ struct ManagedToolTests {
 
             #expect(
                 url.absoluteString.contains("/releases/download/"),
-                "URL for \(tool) should point to releases",
+                "URL for \(tool) should point to releases"
             )
         }
     }

@@ -11,8 +11,9 @@
 // Meaningful error descriptions reduce support burden.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("BinaryManagerError Tests")
 struct BinaryManagerErrorTests {
@@ -21,14 +22,14 @@ struct BinaryManagerErrorTests {
     @Test("downloadFailed error has meaningful description")
     func downloadFailedDescription() {
         let error = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
 
         let description = error.description
 
-        #expect(description.contains("swiftlint"), "Should mention tool name")
+        #expect(description.contains("swa"), "Should mention tool name")
         #expect(description.contains("1.0.0"), "Should mention version")
         #expect(description.contains("404"), "Should mention status code")
     }
@@ -36,26 +37,26 @@ struct BinaryManagerErrorTests {
     @Test("extractionFailed error has meaningful description")
     func extractionFailedDescription() {
         let error = BinaryManagerError.extractionFailed(
-            tool: .swiftformat,
-            reason: "corrupt archive",
+            tool: .swa,
+            reason: "corrupt archive"
         )
 
         let description = error.description
 
-        #expect(description.contains("swiftformat"), "Should mention tool name")
+        #expect(description.contains("swa"), "Should mention tool name")
         #expect(description.contains("corrupt archive"), "Should mention reason")
     }
 
     @Test("binaryNotFound error has meaningful description")
     func binaryNotFoundDescription() {
         let error = BinaryManagerError.binaryNotFound(
-            tool: .swiftlint,
-            path: "/some/path/swiftlint",
+            tool: .swa,
+            path: "/some/path/swa"
         )
 
         let description = error.description
 
-        #expect(description.contains("swiftlint"), "Should mention tool name")
+        #expect(description.contains("swa"), "Should mention tool name")
         #expect(description.contains("/some/path"), "Should mention path")
     }
 
@@ -80,9 +81,9 @@ struct BinaryManagerErrorTests {
     @Test("All error descriptions are non-empty")
     func allDescriptionsNonEmpty() {
         let errors: [BinaryManagerError] = [
-            .downloadFailed(tool: .swiftlint, version: "1.0", statusCode: 500),
-            .extractionFailed(tool: .swiftformat, reason: "test"),
-            .binaryNotFound(tool: .swiftlint, path: "/test"),
+            .downloadFailed(tool: .swa, version: "1.0", statusCode: 500),
+            .extractionFailed(tool: .swa, reason: "test"),
+            .binaryNotFound(tool: .swa, path: "/test"),
             .permissionDenied(path: "/test"),
             .networkUnavailable,
         ]
@@ -90,7 +91,7 @@ struct BinaryManagerErrorTests {
         for error in errors {
             #expect(
                 !error.description.isEmpty,
-                "\(error) should have non-empty description",
+                "\(error) should have non-empty description"
             )
         }
     }
@@ -100,14 +101,14 @@ struct BinaryManagerErrorTests {
     @Test("Same downloadFailed errors are equal")
     func sameDownloadFailedErrorsEqual() {
         let error1 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
         let error2 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
 
         #expect(error1 == error2)
@@ -116,30 +117,14 @@ struct BinaryManagerErrorTests {
     @Test("Different downloadFailed versions are not equal")
     func differentVersionsNotEqual() {
         let error1 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
         let error2 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.1",
-            statusCode: 404,
-        )
-
-        #expect(error1 != error2)
-    }
-
-    @Test("Different downloadFailed tools are not equal")
-    func differentToolsNotEqual() {
-        let error1 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
-            version: "1.0.0",
-            statusCode: 404,
-        )
-        let error2 = BinaryManagerError.downloadFailed(
-            tool: .swiftformat,
-            version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
 
         #expect(error1 != error2)
@@ -148,14 +133,14 @@ struct BinaryManagerErrorTests {
     @Test("Different downloadFailed status codes are not equal")
     func differentStatusCodesNotEqual() {
         let error1 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 404,
+            statusCode: 404
         )
         let error2 = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0.0",
-            statusCode: 500,
+            statusCode: 500
         )
 
         #expect(error1 != error2)
@@ -164,12 +149,12 @@ struct BinaryManagerErrorTests {
     @Test("Same extractionFailed errors are equal")
     func sameExtractionFailedErrorsEqual() {
         let error1 = BinaryManagerError.extractionFailed(
-            tool: .swiftformat,
-            reason: "corrupt",
+            tool: .swa,
+            reason: "corrupt"
         )
         let error2 = BinaryManagerError.extractionFailed(
-            tool: .swiftformat,
-            reason: "corrupt",
+            tool: .swa,
+            reason: "corrupt"
         )
 
         #expect(error1 == error2)
@@ -178,12 +163,12 @@ struct BinaryManagerErrorTests {
     @Test("Same binaryNotFound errors are equal")
     func sameBinaryNotFoundErrorsEqual() {
         let error1 = BinaryManagerError.binaryNotFound(
-            tool: .swiftlint,
-            path: "/test",
+            tool: .swa,
+            path: "/test"
         )
         let error2 = BinaryManagerError.binaryNotFound(
-            tool: .swiftlint,
-            path: "/test",
+            tool: .swa,
+            path: "/test"
         )
 
         #expect(error1 == error2)
@@ -208,17 +193,17 @@ struct BinaryManagerErrorTests {
     @Test("Different error types are not equal")
     func differentErrorTypesNotEqual() {
         let download = BinaryManagerError.downloadFailed(
-            tool: .swiftlint,
+            tool: .swa,
             version: "1.0",
-            statusCode: 404,
+            statusCode: 404
         )
         let extraction = BinaryManagerError.extractionFailed(
-            tool: .swiftlint,
-            reason: "test",
+            tool: .swa,
+            reason: "test"
         )
         let notFound = BinaryManagerError.binaryNotFound(
-            tool: .swiftlint,
-            path: "/test",
+            tool: .swa,
+            path: "/test"
         )
         let permission = BinaryManagerError.permissionDenied(path: "/test")
         let network = BinaryManagerError.networkUnavailable

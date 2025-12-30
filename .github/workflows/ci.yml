@@ -31,8 +31,8 @@ jobs:
   # ============================================================================
   # Stage 1: Code Quality (Always runs)
   # ============================================================================
-  lint:
-    name: Lint
+  format-check:
+    name: Format Check
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -40,24 +40,16 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-      - name: Ensure Linting Tools
-        run: |
-          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
-
-      - name: SwiftLint
-        run: swiftlint lint --reporter github-actions-logging
-
-      - name: SwiftFormat
-        run: swiftformat --lint .
+      - name: Check Formatting
+        run: xcrun swift-format lint --strict --recursive .
 
   # ============================================================================
-  # Stage 2: Build & Test (Always runs, depends on lint)
+  # Stage 2: Build & Test (Always runs, depends on format check)
   # ============================================================================
   build-and-test:
     name: Build & Test
     runs-on: macos-15
-    needs: lint
+    needs: format-check
     steps:
       - uses: actions/checkout@v4
 
@@ -72,11 +64,6 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
-
-      - name: Ensure Linting Tools
-        run: |
-          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
       - name: Build
         run: swift build -c release
@@ -85,12 +72,12 @@ jobs:
         run: swift test --parallel
 
   # ============================================================================
-  # Stage 3: Security Analysis (Always runs, depends on lint)
+  # Stage 3: Security Analysis (Always runs, depends on format check)
   # ============================================================================
   codeql:
     name: CodeQL Analysis
     runs-on: macos-15
-    needs: lint
+    needs: format-check
     steps:
       - uses: actions/checkout@v4
 
@@ -105,11 +92,6 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
-
-      - name: Ensure Linting Tools
-        run: |
-          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -220,11 +202,6 @@ jobs:
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Ensure Linting Tools
-        run: |
-          command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-          command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
       - name: Cache SPM Dependencies
         uses: actions/cache@v4

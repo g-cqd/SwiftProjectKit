@@ -12,7 +12,7 @@ enum EmptyCollectionTests {
 
     // BAD: Using count == 0
     static func badCountCheck(_ array: [Int]) -> Bool {
-        array.count == 0 // swiftlint:disable:this empty_count
+        array.count == 0  // swiftlint:disable:this empty_count
     }
 
     // GOOD: Using isEmpty
@@ -22,7 +22,7 @@ enum EmptyCollectionTests {
 
     // BAD: Using count > 0
     static func badNotEmptyCheck(_ array: [Int]) -> Bool {
-        array.count > 0 // swiftlint:disable:this empty_count
+        array.count > 0  // swiftlint:disable:this empty_count
     }
 
     // GOOD: Using !isEmpty
@@ -37,7 +37,7 @@ enum FirstLastWhereTests {
 
     // BAD: filter().first
     static func badFilterFirst(_ numbers: [Int]) -> Int? {
-        numbers.filter { $0 > 5 }.first // swiftlint:disable:this first_where
+        numbers.filter { $0 > 5 }.first  // swiftlint:disable:this first_where
     }
 
     // GOOD: first(where:)
@@ -47,7 +47,7 @@ enum FirstLastWhereTests {
 
     // BAD: filter().last
     static func badFilterLast(_ numbers: [Int]) -> Int? {
-        numbers.filter { $0 > 5 }.last // swiftlint:disable:this last_where
+        numbers.filter { $0 > 5 }.last  // swiftlint:disable:this last_where
     }
 
     // GOOD: last(where:)
@@ -86,7 +86,7 @@ enum ToggleBoolTests {
 
     // BAD: Manual negation
     static func badToggle() {
-        flag = !flag // swiftlint:disable:this toggle_bool
+        flag = !flag  // swiftlint:disable:this toggle_bool
     }
 
     // GOOD: Using toggle()
@@ -101,7 +101,7 @@ enum SortedFirstLastTests {
 
     // BAD: sorted().first
     static func badSortedFirst(_ numbers: [Int]) -> Int? {
-        numbers.sorted().first // swiftlint:disable:this sorted_first_last
+        numbers.sorted().first  // swiftlint:disable:this sorted_first_last
     }
 
     // GOOD: min()
@@ -111,7 +111,7 @@ enum SortedFirstLastTests {
 
     // BAD: sorted().last
     static func badSortedLast(_ numbers: [Int]) -> Int? {
-        numbers.sorted().last // swiftlint:disable:this sorted_first_last
+        numbers.sorted().last  // swiftlint:disable:this sorted_first_last
     }
 
     // GOOD: max()
@@ -126,7 +126,7 @@ enum RedundantNilCoalescingTests {
 
     // BAD: Nil coalescing with nil
     static func badNilCoalescing(_ value: String?) -> String? {
-        value ?? nil // swiftlint:disable:this redundant_nil_coalescing
+        value ?? nil  // swiftlint:disable:this redundant_nil_coalescing
     }
 
     // GOOD: Just use the optional
@@ -161,7 +161,7 @@ enum YodaConditionTests {
 
     // BAD: Yoda condition (constant on left)
     static func badYoda(_ value: Int) -> Bool {
-        5 == value // swiftlint:disable:this yoda_condition
+        5 == value  // swiftlint:disable:this yoda_condition
     }
 
     // GOOD: Variable on left

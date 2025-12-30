@@ -62,7 +62,7 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
                 executable: swaPath,
                 arguments: arguments,
                 outputFilesDirectory: outputDir,
-            ),
+            )
         ]
     }
 
@@ -78,7 +78,8 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
             return systemPath
         }
 
-        let binaryDir = workDirectory
+        let binaryDir =
+            workDirectory
             .appendingPathComponent("bin")
             .appendingPathComponent("swa")
             .appendingPathComponent(version)
@@ -90,9 +91,12 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
         }
 
         // Download from GitHub releases
-        guard let downloadURL = URL(
-            string: "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
-        ) else {
+        guard
+            let downloadURL = URL(
+                string:
+                    "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
+            )
+        else {
             throw PluginError.downloadFailed(tool: "swa", statusCode: 0)
         }
 
@@ -102,7 +106,7 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
         defer { try? FileManager.default.removeItem(at: localURL) }
 
         guard let httpResponse = response as? HTTPURLResponse,
-              (200 ... 299).contains(httpResponse.statusCode)
+            (200 ... 299).contains(httpResponse.statusCode)
         else {
             throw PluginError.downloadFailed(
                 tool: "swa",
@@ -225,14 +229,17 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
                     executable: binary,
                     arguments: arguments,
                     outputFilesDirectory: outputDir,
-                ),
+                )
             ]
         }
 
         private func downloadSWASync(to binaryDir: URL, version: String) throws {
-            guard let downloadURL = URL(
-                string: "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
-            ) else {
+            guard
+                let downloadURL = URL(
+                    string:
+                        "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
+                )
+            else {
                 throw PluginError.downloadFailed(tool: "swa", statusCode: 0)
             }
 
@@ -310,10 +317,10 @@ enum PluginError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case let .downloadFailed(tool, statusCode):
+        case .downloadFailed(let tool, let statusCode):
             "Failed to download \(tool) (HTTP \(statusCode))"
 
-        case let .extractionFailed(tool):
+        case .extractionFailed(let tool):
             "Failed to extract \(tool) archive"
         }
     }

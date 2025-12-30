@@ -13,8 +13,9 @@
 // Incorrect configurations lead to failed builds or wrong deployment targets.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("PlatformConfiguration Tests")
 struct PlatformConfigurationTests {

@@ -14,8 +14,9 @@
 // defaults cause project setup failures.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("ProjectConfiguration Tests")
 struct ProjectConfigurationTests {

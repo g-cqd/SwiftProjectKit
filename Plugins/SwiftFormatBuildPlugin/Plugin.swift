@@ -3,10 +3,10 @@ import PackagePlugin
 
 // MARK: - SwiftFormatBuildPlugin
 
-/// Build tool plugin that runs SwiftFormat on every build.
+/// Build tool plugin that runs swift-format on every build.
 ///
-/// This plugin downloads SwiftFormat from GitHub releases and caches it
-/// in the plugin work directory. It runs as a pre-build command.
+/// This plugin uses the swift-format tool from the Xcode toolchain (via xcrun).
+/// It runs as a pre-build command in lint mode (non-destructive).
 @main
 struct SwiftFormatBuildPlugin: BuildToolPlugin {
     // MARK: Internal
@@ -28,51 +28,43 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
             return []
         }
 
-        // Ensure SwiftFormat binary is available
-        let swiftformatPath: URL
+        // Find swift-format via xcrun
+        let swiftFormatPath: URL
         do {
-            swiftformatPath = try await ensureSwiftFormat(
-                in: context.pluginWorkDirectoryURL,
-                version: defaultVersion,
-            )
+            swiftFormatPath = try findSwiftFormat()
         } catch {
-            Diagnostics.warning("SwiftFormat not available: \(error.localizedDescription)")
+            Diagnostics.warning("swift-format not available: \(error.localizedDescription)")
             return []
         }
 
         // Build arguments - lint mode for build (don't modify files)
-        var arguments = ["--lint", "--quiet"]
+        var arguments = ["lint", "--strict", "--parallel"]
 
         // Look for config file
         if let configPath = findConfigFile(in: context.package.directoryURL) {
-            arguments += ["--config", configPath.path]
+            arguments += ["--configuration", configPath.path]
         }
 
-        // Add source directory (more efficient than individual files)
-        arguments.append(sourceTarget.directoryURL.path)
+        // Add source files
+        arguments += sourceFiles.map(\.path)
 
         // Create output directory
-        let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("swiftformat-output")
+        let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("swift-format-output")
 
         return [
             .prebuildCommand(
-                displayName: "SwiftFormat \(target.name)",
-                executable: swiftformatPath,
+                displayName: "swift-format \(target.name)",
+                executable: swiftFormatPath,
                 arguments: arguments,
                 outputFilesDirectory: outputDir,
-            ),
+            )
         ]
     }
 
     // MARK: Private
 
-    /// Default SwiftFormat version to use
-    private let defaultVersion = "0.58.7"
-
-    // MARK: - Private Helpers
-
     private func findConfigFile(in directory: URL) -> URL? {
-        let configNames = [".swiftformat"]
+        let configNames = [".swift-format"]
         for name in configNames {
             let path = directory.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: path.path) {
@@ -82,68 +74,40 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
         return nil
     }
 
-    // swiftlint:disable:next function_body_length
-    private func ensureSwiftFormat(in workDirectory: URL, version: String) async throws -> URL {
-        // First, check if swiftformat is available in PATH (system-installed via brew/mint)
-        if let systemPath = findInPath("swiftformat") {
-            Diagnostics.remark("Using system-installed SwiftFormat at \(systemPath.path)")
+    private func findSwiftFormat() throws -> URL {
+        // First check for swift-format in common paths
+        if let systemPath = findInPath("swift-format") {
+            Diagnostics.remark("Using swift-format at \(systemPath.path)")
             return systemPath
         }
 
-        let binaryDir = workDirectory
-            .appendingPathComponent("bin")
-            .appendingPathComponent("swiftformat")
-            .appendingPathComponent(version)
-        let binaryPath = binaryDir.appendingPathComponent("swiftformat")
+        // Try xcrun to find swift-format from Xcode toolchain
+        let xcrunURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        let pipe = Pipe()
 
-        // Return cached binary if exists
-        if FileManager.default.fileExists(atPath: binaryPath.path) {
-            return binaryPath
+        let process = Process()
+        process.executableURL = xcrunURL
+        process.arguments = ["--find", "swift-format"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw PluginError.toolNotFound(tool: "swift-format")
         }
 
-        // Download from GitHub releases
-        guard let downloadURL = URL(
-            string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
-        ) else {
-            throw PluginError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
-        }
-
-        Diagnostics.remark("Downloading SwiftFormat \(version)...")
-
-        let (localURL, response) = try await URLSession.shared.download(from: downloadURL)
-        defer { try? FileManager.default.removeItem(at: localURL) }
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200 ... 299).contains(httpResponse.statusCode)
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !path.isEmpty
         else {
-            throw PluginError.downloadFailed(
-                tool: "SwiftFormat",
-                statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0,
-            )
+            throw PluginError.toolNotFound(tool: "swift-format")
         }
 
-        // Create directory
-        try FileManager.default.createDirectory(at: binaryDir, withIntermediateDirectories: true)
-
-        // Extract zip
-        let unzipProcess = Process()
-        unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        unzipProcess.arguments = ["-o", "-q", localURL.path, "-d", binaryDir.path]
-        try unzipProcess.run()
-        unzipProcess.waitUntilExit()
-
-        guard unzipProcess.terminationStatus == 0 else {
-            throw PluginError.extractionFailed(tool: "SwiftFormat")
-        }
-
-        // Make executable
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o755],
-            ofItemAtPath: binaryPath.path,
-        )
-
-        Diagnostics.remark("SwiftFormat \(version) ready")
-        return binaryPath
+        let url = URL(fileURLWithPath: path)
+        Diagnostics.remark("Using swift-format from Xcode toolchain at \(path)")
+        return url
     }
 }
 
@@ -153,7 +117,6 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
     import XcodeProjectPlugin
 
     extension SwiftFormatBuildPlugin: XcodeBuildToolPlugin {
-        // swiftlint:disable:next function_body_length
         func createBuildCommands(
             context: XcodePluginContext,
             target: XcodeTarget,
@@ -167,131 +130,44 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
                 return []
             }
 
-            // First, check if swiftformat is available in PATH (system-installed via brew/mint)
-            if let systemPath = findInPath("swiftformat") {
-                Diagnostics.remark("Using system-installed SwiftFormat at \(systemPath.path)")
-                return createSwiftFormatCommand(
-                    binary: systemPath,
-                    sourceFiles: sourceFiles,
-                    configDir: context.xcodeProject.directoryURL,
-                    outputDir: context.pluginWorkDirectoryURL.appendingPathComponent("swiftformat-output"),
-                    targetName: target.displayName,
-                )
-            }
-
-            // Check for cached binary
-            let binaryDir = context.pluginWorkDirectoryURL
-                .appendingPathComponent("bin")
-                .appendingPathComponent("swiftformat")
-                .appendingPathComponent("0.58.7")
-            let binaryPath = binaryDir.appendingPathComponent("swiftformat")
-
-            // If binary doesn't exist, try to download synchronously
-            if !FileManager.default.fileExists(atPath: binaryPath.path) {
-                do {
-                    try downloadSwiftFormatSync(to: binaryDir, version: "0.58.7")
-                } catch {
-                    Diagnostics.warning("SwiftFormat not available: \(error.localizedDescription)")
-                    return []
-                }
+            // Find swift-format via xcrun
+            let swiftFormatPath: URL
+            do {
+                swiftFormatPath = try findSwiftFormat()
+            } catch {
+                Diagnostics.warning("swift-format not available: \(error.localizedDescription)")
+                return []
             }
 
             // Build arguments - lint mode for build
-            var arguments = ["--lint", "--quiet"]
+            var arguments = ["lint", "--strict", "--parallel"]
 
             // Look for config file in project directory
             if let configPath = findConfigFile(in: context.xcodeProject.directoryURL) {
-                arguments += ["--config", configPath.path]
+                arguments += ["--configuration", configPath.path]
             }
 
             // Add source files
             arguments += sourceFiles.map(\.path)
 
-            let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("swiftformat-output")
+            let outputDir = context.pluginWorkDirectoryURL.appendingPathComponent("swift-format-output")
 
             return [
                 .prebuildCommand(
-                    displayName: "SwiftFormat \(target.displayName)",
-                    executable: binaryPath,
+                    displayName: "swift-format \(target.displayName)",
+                    executable: swiftFormatPath,
                     arguments: arguments,
                     outputFilesDirectory: outputDir,
-                ),
-            ]
-        }
-
-        private func createSwiftFormatCommand(
-            binary: URL,
-            sourceFiles: [URL],
-            configDir: URL,
-            outputDir: URL,
-            targetName: String,
-        ) -> [Command] {
-            var arguments = ["--lint", "--quiet"]
-            if let configPath = findConfigFile(in: configDir) {
-                arguments += ["--config", configPath.path]
-            }
-            arguments += sourceFiles.map(\.path)
-
-            return [
-                .prebuildCommand(
-                    displayName: "SwiftFormat \(targetName)",
-                    executable: binary,
-                    arguments: arguments,
-                    outputFilesDirectory: outputDir,
-                ),
+                )
             ]
         }
 
         private func findConfigFile(in directory: URL) -> URL? {
-            let path = directory.appendingPathComponent(".swiftformat")
+            let path = directory.appendingPathComponent(".swift-format")
             if FileManager.default.fileExists(atPath: path.path) {
                 return path
             }
             return nil
-        }
-
-        private func downloadSwiftFormatSync(to binaryDir: URL, version: String) throws {
-            guard let downloadURL = URL(
-                string: "https://github.com/nicklockwood/SwiftFormat/releases/download/\(version)/swiftformat.zip",
-            ) else {
-                throw PluginError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
-            }
-
-            let semaphore = DispatchSemaphore(value: 0)
-            var downloadError: Error?
-            var localFileURL: URL?
-
-            let task = URLSession.shared.downloadTask(with: downloadURL) { url, _, error in
-                localFileURL = url
-                downloadError = error
-                semaphore.signal()
-            }
-            task.resume()
-            semaphore.wait()
-
-            if let error = downloadError {
-                throw error
-            }
-
-            guard let localURL = localFileURL else {
-                throw PluginError.downloadFailed(tool: "SwiftFormat", statusCode: 0)
-            }
-
-            defer { try? FileManager.default.removeItem(at: localURL) }
-
-            try FileManager.default.createDirectory(at: binaryDir, withIntermediateDirectories: true)
-
-            let unzipProcess = Process()
-            unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            unzipProcess.arguments = ["-o", "-q", localURL.path, "-d", binaryDir.path]
-            try unzipProcess.run()
-            unzipProcess.waitUntilExit()
-
-            let binaryPath = binaryDir.appendingPathComponent("swiftformat")
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o755],
-                ofItemAtPath: binaryPath.path,
-            )
         }
     }
 #endif
@@ -300,7 +176,6 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
-    // Common paths where brew/system tools are installed
     let searchPaths = [
         "/opt/homebrew/bin",
         "/usr/local/bin",
@@ -308,7 +183,6 @@ private func findInPath(_ executable: String) -> URL? {
         "/bin",
     ]
 
-    // Also check PATH environment variable
     let envPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
     let allPaths = searchPaths + envPath.split(separator: ":").map(String.init)
 
@@ -324,18 +198,14 @@ private func findInPath(_ executable: String) -> URL? {
 // MARK: - PluginError
 
 enum PluginError: Error, CustomStringConvertible {
-    case downloadFailed(tool: String, statusCode: Int)
-    case extractionFailed(tool: String)
+    case toolNotFound(tool: String)
 
     // MARK: Internal
 
     var description: String {
         switch self {
-        case let .downloadFailed(tool, statusCode):
-            "Failed to download \(tool) (HTTP \(statusCode))"
-
-        case let .extractionFailed(tool):
-            "Failed to extract \(tool) archive"
+        case .toolNotFound(let tool):
+            "\(tool) not found. Ensure Xcode is installed and xcode-select is configured."
         }
     }
 }

@@ -4,40 +4,36 @@ import Foundation
 
 /// Supported tools that can be downloaded and managed
 public enum ManagedTool: String, Sendable, CaseIterable {
-    case swiftlint
-    case swiftformat
+    case swa
 
     // MARK: Public
 
     /// GitHub repository in "owner/repo" format
     public var repository: String {
         switch self {
-        case .swiftlint: "realm/SwiftLint"
-        case .swiftformat: "nicklockwood/SwiftFormat"
+        case .swa: "nicklockwood/SwiftStaticAnalysis"
         }
     }
 
     /// Binary name inside the downloaded archive
     public var binaryName: String {
-        rawValue
+        switch self {
+        case .swa: "swa"
+        }
     }
 
     /// Default pinned version
     public var defaultVersion: String {
         switch self {
-        case .swiftlint: "0.57.1"
-        case .swiftformat: "0.54.6"
+        case .swa: "0.1.0"
         }
     }
 
     /// Asset name pattern for macOS universal binary
     public func assetName(for version: String) -> String {
         switch self {
-        case .swiftlint:
-            "portable_swiftlint.zip"
-
-        case .swiftformat:
-            "swiftformat.zip"
+        case .swa:
+            "swa.zip"
         }
     }
 
@@ -45,7 +41,8 @@ public enum ManagedTool: String, Sendable, CaseIterable {
     public func downloadURL(for version: String) -> URL {
         let tag = version.hasPrefix("v") ? version : version
         let asset = assetName(for: version)
-        // swiftlint:disable:next force_unwrapping
+        // swift-format-ignore: NeverForceUnwrap
+        // URL is constructed from known-valid components
         return URL(string: "https://github.com/\(repository)/releases/download/\(tag)/\(asset)")!
     }
 }
@@ -64,16 +61,16 @@ public enum BinaryManagerError: Error, Sendable, CustomStringConvertible, Equata
 
     public var description: String {
         switch self {
-        case let .downloadFailed(tool, version, statusCode):
+        case .downloadFailed(let tool, let version, let statusCode):
             "Failed to download \(tool.rawValue) v\(version): HTTP \(statusCode)"
 
-        case let .extractionFailed(tool, reason):
+        case .extractionFailed(let tool, let reason):
             "Failed to extract \(tool.rawValue): \(reason)"
 
-        case let .binaryNotFound(tool, path):
+        case .binaryNotFound(let tool, let path):
             "\(tool.rawValue) binary not found at \(path)"
 
-        case let .permissionDenied(path):
+        case .permissionDenied(let path):
             "Permission denied: \(path)"
 
         case .networkUnavailable:
@@ -190,7 +187,7 @@ public actor BinaryManager {
 
         // Validate response
         guard let httpResponse = response as? HTTPURLResponse,
-              (200 ... 299).contains(httpResponse.statusCode)
+            (200 ... 299).contains(httpResponse.statusCode)
         else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             try? fileSystem.removeItem(at: localURL)
@@ -208,32 +205,9 @@ public actor BinaryManager {
         // Clean up downloaded archive
         try? fileSystem.removeItem(at: localURL)
 
-        // Handle SwiftLint's nested binary location
-        if tool == .swiftlint {
-            try await relocateSwiftLintBinaryIfNeeded(in: destinationDir)
-        }
-
         // Make binary executable
         let binaryURL = binaryPath(for: tool, version: version)
         try makeExecutable(binaryURL)
-    }
-
-    private func relocateSwiftLintBinaryIfNeeded(in directory: URL) async throws {
-        let expectedPath = directory.appendingPathComponent("swiftlint")
-
-        guard !fileSystem.fileExists(atPath: expectedPath.path) else {
-            return // Already in correct location
-        }
-
-        // Look for swiftlint binary in subdirectories
-        let contents = try fileSystem.contentsOfDirectory(at: directory)
-        for item in contents {
-            let potentialBinary = item.appendingPathComponent("swiftlint")
-            if fileSystem.fileExists(atPath: potentialBinary.path) {
-                try fileSystem.moveItem(at: potentialBinary, to: expectedPath)
-                return
-            }
-        }
     }
 
     private func makeExecutable(_ url: URL) throws {

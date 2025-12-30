@@ -1,237 +1,282 @@
 // SwiftFormatConfigTests.swift
-// Tests for SwiftFormat configuration template validity and structure.
+// Tests for swift-format (apple/swift-format) JSON configuration validity.
 //
 // ## Test Goals
-// - Verify the SwiftFormat configuration can be parsed as valid options
-// - Ensure critical formatting options are set correctly
-// - Validate exclusion patterns are properly configured
-// - Confirm Swift version is specified
+// - Verify the swift-format configuration is valid JSON that can be parsed
+// - Ensure required fields exist with correct types
+// - Validate rule configurations are sensible for modern Swift
+// - Confirm formatting options match project standards
 //
 // ## Why These Tests Matter
-// Invalid SwiftFormat configuration will cause formatting to fail or produce
-// unexpected results. These tests ensure the configuration is valid and sensible.
+// Invalid swift-format configuration will cause builds to fail or format incorrectly.
+// These tests catch configuration errors before they reach users.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
 
-@Suite("SwiftFormat Configuration Tests")
+@testable import SwiftProjectKitCore
+
+// MARK: - SwiftFormatConfigTests
+
+@Suite("swift-format Configuration Tests")
 struct SwiftFormatConfigTests {
     // MARK: Internal
 
-    // MARK: - Basic Validity
+    // MARK: - JSON Validity
+
+    @Test("Configuration is valid parseable JSON")
+    func validJSON() throws {
+        let config = DefaultConfigs.swiftFormat
+        let data = Data(config.utf8)
+        let parsed = try JSONSerialization.jsonObject(with: data)
+
+        #expect(parsed is [String: Any], "Root should be a dictionary")
+    }
 
     @Test("Configuration is non-empty")
     func configurationNotEmpty() {
-        let config = DefaultConfigs.swiftformat
-        #expect(!config.isEmpty, "SwiftFormat config must not be empty")
+        let config = DefaultConfigs.swiftFormat
+        #expect(!config.isEmpty, "swift-format config must not be empty")
     }
 
-    @Test("Configuration has multiple lines")
-    func configurationHasMultipleLines() {
-        let config = DefaultConfigs.swiftformat
-        let lines = config.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        #expect(lines.count > 5, "Config should have multiple option lines")
+    // MARK: - Required Top-Level Fields
+
+    @Test("Contains version field")
+    func containsVersion() throws {
+        let json = try parseSwiftFormatConfig()
+
+        let version = json["version"]
+        #expect(version != nil, "version field must exist")
+        #expect(version is Int, "version must be an integer")
+        #expect(version as? Int == 1, "version should be 1")
     }
 
-    // MARK: - Swift Version
+    @Test("Contains lineLength field")
+    func containsLineLength() throws {
+        let json = try parseSwiftFormatConfig()
 
-    @Test("Specifies Swift version")
-    func specifiesSwiftVersion() throws {
-        let options = try parseSwiftFormatOptions()
+        let lineLength = json["lineLength"]
+        #expect(lineLength != nil, "lineLength field must exist")
+        #expect(lineLength is Int, "lineLength must be an integer")
 
-        #expect(
-            options.contains { $0.key == "--swiftversion" },
-            "Must specify --swiftversion for correct parsing",
-        )
+        if let length = lineLength as? Int {
+            #expect(length == 120, "lineLength should be 120")
+        }
     }
 
-    @Test("Swift version is valid format")
-    func swiftVersionFormat() throws {
-        let options = try parseSwiftFormatOptions()
+    @Test("Contains indentation configuration")
+    func containsIndentation() throws {
+        let json = try parseSwiftFormatConfig()
 
-        guard let version = options["--swiftversion"] else {
-            Issue.record("--swiftversion not found")
+        let indentation = json["indentation"]
+        #expect(indentation != nil, "indentation field must exist")
+        #expect(indentation is [String: Any], "indentation must be a dictionary")
+
+        if let indent = indentation as? [String: Any] {
+            #expect(indent["spaces"] as? Int == 4, "Should use 4-space indentation")
+        }
+    }
+
+    @Test("Contains tabWidth field")
+    func containsTabWidth() throws {
+        let json = try parseSwiftFormatConfig()
+
+        let tabWidth = json["tabWidth"]
+        #expect(tabWidth != nil, "tabWidth field must exist")
+        #expect(tabWidth as? Int == 4, "tabWidth should be 4")
+    }
+
+    @Test("Contains maximumBlankLines field")
+    func containsMaximumBlankLines() throws {
+        let json = try parseSwiftFormatConfig()
+
+        let maxBlankLines = json["maximumBlankLines"]
+        #expect(maxBlankLines != nil, "maximumBlankLines field must exist")
+        #expect(maxBlankLines as? Int == 1, "maximumBlankLines should be 1")
+    }
+
+    // MARK: - Rules Configuration
+
+    @Test("Contains rules dictionary")
+    func containsRules() throws {
+        let json = try parseSwiftFormatConfig()
+
+        let rules = json["rules"]
+        #expect(rules != nil, "rules section must exist")
+        #expect(rules is [String: Bool], "rules must be dictionary of booleans")
+    }
+
+    @Test("Rules are all boolean values")
+    func rulesAreBooleans() throws {
+        let json = try parseSwiftFormatConfig()
+
+        guard let rules = json["rules"] as? [String: Any] else {
+            Issue.record("rules section not found or wrong type")
             return
         }
 
-        let versionPattern = #"^\d+\.\d+$"#
-        let regex = try NSRegularExpression(pattern: versionPattern)
-        let range = NSRange(version.startIndex..., in: version)
+        for (key, value) in rules {
+            #expect(value is Bool, "Rule '\(key)' value must be boolean")
+        }
+    }
+
+    // MARK: - Critical Safety Rules
+
+    @Test("NeverForceUnwrap rule is enabled")
+    func neverForceUnwrapEnabled() throws {
+        let rules = try parseRules()
 
         #expect(
-            regex.firstMatch(in: version, range: range) != nil,
-            "Swift version '\(version)' should be in X.Y format",
+            rules["NeverForceUnwrap"] == true,
+            "NeverForceUnwrap must be enabled for safety"
         )
     }
 
-    // MARK: - Indentation
-
-    @Test("Specifies indentation setting")
-    func specifiesIndentation() throws {
-        let options = try parseSwiftFormatOptions()
+    @Test("NeverUseForceTry rule is enabled")
+    func neverUseForceTryEnabled() throws {
+        let rules = try parseRules()
 
         #expect(
-            options.contains { $0.key == "--indent" },
-            "Must specify --indent for consistent formatting",
+            rules["NeverUseForceTry"] == true,
+            "NeverUseForceTry must be enabled for safety"
         )
     }
 
-    @Test("Uses 4-space indentation")
-    func uses4SpaceIndentation() throws {
-        let options = try parseSwiftFormatOptions()
-
-        let indent = options["--indent"]
-        #expect(indent == "4", "Should use 4-space indentation (industry standard)")
-    }
-
-    // MARK: - Line Width
-
-    @Test("Specifies maximum line width")
-    func specifiesMaxWidth() throws {
-        let options = try parseSwiftFormatOptions()
+    @Test("NeverUseImplicitlyUnwrappedOptionals rule is enabled")
+    func neverUseImplicitlyUnwrappedOptionalsEnabled() throws {
+        let rules = try parseRules()
 
         #expect(
-            options.contains { $0.key == "--maxwidth" },
-            "Must specify --maxwidth for line length control",
+            rules["NeverUseImplicitlyUnwrappedOptionals"] == true,
+            "NeverUseImplicitlyUnwrappedOptionals must be enabled for safety"
         )
     }
 
-    @Test("Max width matches SwiftLint line_length")
-    func maxWidthMatchesSwiftLint() throws {
-        let options = try parseSwiftFormatOptions()
+    // MARK: - Code Style Rules
 
-        guard let maxWidth = options["--maxwidth"], let width = Int(maxWidth) else {
-            Issue.record("--maxwidth not found or not a number")
+    @Test("OrderedImports rule is enabled")
+    func orderedImportsEnabled() throws {
+        let rules = try parseRules()
+
+        #expect(
+            rules["OrderedImports"] == true,
+            "OrderedImports should be enabled for consistency"
+        )
+    }
+
+    @Test("DoNotUseSemicolons rule is enabled")
+    func doNotUseSemicolonsEnabled() throws {
+        let rules = try parseRules()
+
+        #expect(
+            rules["DoNotUseSemicolons"] == true,
+            "DoNotUseSemicolons should be enabled"
+        )
+    }
+
+    @Test("UseEarlyExits rule is enabled")
+    func useEarlyExitsEnabled() throws {
+        let rules = try parseRules()
+
+        #expect(
+            rules["UseEarlyExits"] == true,
+            "UseEarlyExits should be enabled for cleaner control flow"
+        )
+    }
+
+    @Test("FileScopedDeclarationPrivacy rule is enabled")
+    func fileScopedDeclarationPrivacyEnabled() throws {
+        let rules = try parseRules()
+
+        #expect(
+            rules["FileScopedDeclarationPrivacy"] == true,
+            "FileScopedDeclarationPrivacy should be enabled"
+        )
+    }
+
+    // MARK: - Documentation Rules
+
+    @Test("AllPublicDeclarationsHaveDocumentation is disabled")
+    func allPublicDeclarationsHaveDocumentationDisabled() throws {
+        let rules = try parseRules()
+
+        #expect(
+            rules["AllPublicDeclarationsHaveDocumentation"] == false,
+            "AllPublicDeclarationsHaveDocumentation should be disabled (too strict)"
+        )
+    }
+
+    // MARK: - Formatting Options
+
+    @Test("respectsExistingLineBreaks is enabled")
+    func respectsExistingLineBreaksEnabled() throws {
+        let json = try parseSwiftFormatConfig()
+
+        #expect(
+            json["respectsExistingLineBreaks"] as? Bool == true,
+            "respectsExistingLineBreaks should be true"
+        )
+    }
+
+    @Test("lineBreakBeforeEachArgument is enabled")
+    func lineBreakBeforeEachArgumentEnabled() throws {
+        let json = try parseSwiftFormatConfig()
+
+        #expect(
+            json["lineBreakBeforeEachArgument"] as? Bool == true,
+            "lineBreakBeforeEachArgument should be true"
+        )
+    }
+
+    @Test("multiElementCollectionTrailingCommas is enabled")
+    func multiElementCollectionTrailingCommasEnabled() throws {
+        let json = try parseSwiftFormatConfig()
+
+        #expect(
+            json["multiElementCollectionTrailingCommas"] as? Bool == true,
+            "multiElementCollectionTrailingCommas should be true"
+        )
+    }
+
+    @Test("fileScopedDeclarationPrivacy has correct accessLevel")
+    func fileScopedDeclarationPrivacyAccessLevel() throws {
+        let json = try parseSwiftFormatConfig()
+
+        guard let privacy = json["fileScopedDeclarationPrivacy"] as? [String: Any] else {
+            Issue.record("fileScopedDeclarationPrivacy not found or wrong type")
             return
         }
 
         #expect(
-            width == 120,
-            "Max width should be 120 to match SwiftLint line_length warning",
-        )
-    }
-
-    // MARK: - Line Breaks
-
-    @Test("Specifies line break style")
-    func specifiesLineBreaks() throws {
-        let options = try parseSwiftFormatOptions()
-
-        #expect(
-            options.contains { $0.key == "--linebreaks" },
-            "Should specify --linebreaks for consistency",
-        )
-    }
-
-    @Test("Uses LF line breaks")
-    func usesLFLineBreaks() throws {
-        let options = try parseSwiftFormatOptions()
-
-        let linebreaks = options["--linebreaks"]
-        #expect(linebreaks == "lf", "Should use Unix-style LF line breaks")
-    }
-
-    // MARK: - Whitespace
-
-    @Test("Specifies whitespace trimming")
-    func specifiesWhitespaceTrimming() throws {
-        let options = try parseSwiftFormatOptions()
-
-        #expect(
-            options.contains { $0.key == "--trimwhitespace" },
-            "Should specify --trimwhitespace",
-        )
-    }
-
-    // MARK: - Exclusions
-
-    @Test("Excludes build directories")
-    func excludesBuildDirectories() throws {
-        let options = try parseSwiftFormatOptions()
-
-        guard let excludes = options["--exclude"] else {
-            Issue.record("--exclude not found")
-            return
-        }
-
-        #expect(excludes.contains(".build"), ".build must be excluded")
-        #expect(excludes.contains(".swiftpm"), ".swiftpm must be excluded")
-        #expect(excludes.contains("DerivedData"), "DerivedData must be excluded")
-    }
-
-    // MARK: - Enabled Rules
-
-    @Test("Enables blankLineAfterImports")
-    func enablesBlankLineAfterImports() throws {
-        let options = try parseSwiftFormatOptions()
-
-        guard let enabled = options["--enable"] else {
-            Issue.record("--enable not found")
-            return
-        }
-
-        #expect(
-            enabled.contains("blankLineAfterImports"),
-            "blankLineAfterImports should be enabled",
-        )
-    }
-
-    @Test("Enables isEmpty rule")
-    func enablesIsEmpty() throws {
-        let options = try parseSwiftFormatOptions()
-
-        guard let enabled = options["--enable"] else {
-            Issue.record("--enable not found")
-            return
-        }
-
-        #expect(enabled.contains("isEmpty"), "isEmpty should be enabled")
-    }
-
-    // MARK: - Import Grouping
-
-    @Test("Specifies import grouping")
-    func specifiesImportGrouping() throws {
-        let options = try parseSwiftFormatOptions()
-
-        #expect(
-            options.contains { $0.key == "--importgrouping" },
-            "Should specify --importgrouping for organized imports",
+            privacy["accessLevel"] as? String == "private",
+            "fileScopedDeclarationPrivacy.accessLevel should be 'private'"
         )
     }
 
     // MARK: Private
 
-    // MARK: - Helper
+    // MARK: - Helpers
 
-    private func parseSwiftFormatOptions() throws -> [String: String] {
-        let config = DefaultConfigs.swiftformat
-        var options: [String: String] = [:]
-
-        let lines = config.components(separatedBy: .newlines)
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else {
-                continue
-            }
-
-            if trimmed.hasPrefix("--") {
-                let parts = trimmed.split(separator: " ", maxSplits: 1)
-                let key = String(parts[0])
-
-                if parts.count > 1 {
-                    let existingValue = options[key] ?? ""
-                    let newValue = String(parts[1])
-                    options[key] = existingValue.isEmpty ? newValue : "\(existingValue),\(newValue)"
-                } else {
-                    options[key] = ""
-                }
-            }
+    private func parseSwiftFormatConfig() throws -> [String: Any] {
+        let config = DefaultConfigs.swiftFormat
+        let data = Data(config.utf8)
+        guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ConfigParseError.invalidStructure
         }
-
-        return options
+        return parsed
     }
+
+    private func parseRules() throws -> [String: Bool] {
+        let json = try parseSwiftFormatConfig()
+        guard let rules = json["rules"] as? [String: Bool] else {
+            throw ConfigParseError.invalidStructure
+        }
+        return rules
+    }
+}
+
+// MARK: - ConfigParseError
+
+private enum ConfigParseError: Error {
+    case invalidStructure
 }

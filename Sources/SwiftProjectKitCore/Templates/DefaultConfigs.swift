@@ -7,41 +7,41 @@ public enum DefaultConfigs {}
 
 // MARK: - Git Ignore
 
-public extension DefaultConfigs {
-    static let gitignore = """
-    # Swift Package Manager
-    .build/
-    .swiftpm/
-    Package.resolved
+extension DefaultConfigs {
+    public static let gitignore = """
+        # Swift Package Manager
+        .build/
+        .swiftpm/
+        Package.resolved
 
-    # Xcode
-    *.xcodeproj/
-    *.xcworkspace/
-    xcuserdata/
-    *.playground/
-    DerivedData/
+        # Xcode
+        *.xcodeproj/
+        *.xcworkspace/
+        xcuserdata/
+        *.playground/
+        DerivedData/
 
-    # macOS
-    .DS_Store
-    *.dSYM.zip
-    *.dSYM
+        # macOS
+        .DS_Store
+        *.dSYM.zip
+        *.dSYM
 
-    # Generated
-    *.generated.swift
+        # Generated
+        *.generated.swift
 
-    # IDE
-    .idea/
-    .vscode/
+        # IDE
+        .idea/
+        .vscode/
 
-    # Testing
-    *.xcresult
+        # Testing
+        *.xcresult
 
-    # Secrets (never commit these)
-    .env
-    .env.*
-    *.pem
-    *.p12
-    credentials.json
-    secrets.json
-    """
+        # Secrets (never commit these)
+        .env
+        .env.*
+        *.pem
+        *.p12
+        credentials.json
+        secrets.json
+        """
 }

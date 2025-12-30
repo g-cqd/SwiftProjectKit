@@ -28,13 +28,14 @@ struct SWACommandPlugin: CommandPlugin {
         let remaining = extractor.remainingArguments
 
         // Determine which analysis to run
-        let analysisType: AnalysisType = if remaining.contains("unused") {
-            .unused
-        } else if remaining.contains("duplicates") {
-            .duplicates
-        } else {
-            .all
-        }
+        let analysisType: AnalysisType =
+            if remaining.contains("unused") {
+                .unused
+            } else if remaining.contains("duplicates") {
+                .duplicates
+            } else {
+                .all
+            }
 
         // Ensure swa binary is available
         let swaPath = try await ensureSWA(
@@ -43,11 +44,12 @@ struct SWACommandPlugin: CommandPlugin {
         )
 
         // Determine targets to analyze
-        let targets: [Target] = if targetNames.isEmpty {
-            context.package.targets.filter { $0 is SourceModuleTarget }
-        } else {
-            try context.package.targets(named: targetNames)
-        }
+        let targets: [Target] =
+            if targetNames.isEmpty {
+                context.package.targets.filter { $0 is SourceModuleTarget }
+            } else {
+                try context.package.targets(named: targetNames)
+            }
 
         guard !targets.isEmpty else {
             Diagnostics.warning("No targets to analyze")
@@ -256,7 +258,8 @@ struct SWACommandPlugin: CommandPlugin {
             return systemPath
         }
 
-        let binaryDir = workDirectory
+        let binaryDir =
+            workDirectory
             .appendingPathComponent("bin")
             .appendingPathComponent("swa")
             .appendingPathComponent(version)
@@ -266,9 +269,12 @@ struct SWACommandPlugin: CommandPlugin {
             return binaryPath
         }
 
-        guard let downloadURL = URL(
-            string: "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
-        ) else {
+        guard
+            let downloadURL = URL(
+                string:
+                    "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
+            )
+        else {
             throw CommandError.downloadFailed(tool: "swa", statusCode: 0)
         }
 
@@ -278,7 +284,7 @@ struct SWACommandPlugin: CommandPlugin {
         defer { try? FileManager.default.removeItem(at: localURL) }
 
         guard let httpResponse = response as? HTTPURLResponse,
-              (200 ... 299).contains(httpResponse.statusCode)
+            (200 ... 299).contains(httpResponse.statusCode)
         else {
             throw CommandError.downloadFailed(
                 tool: "swa",
@@ -321,13 +327,14 @@ struct SWACommandPlugin: CommandPlugin {
             let strict = extractor.extractFlag(named: "strict") > 0
             let remaining = extractor.remainingArguments
 
-            let analysisType: AnalysisType = if remaining.contains("unused") {
-                .unused
-            } else if remaining.contains("duplicates") {
-                .duplicates
-            } else {
-                .all
-            }
+            let analysisType: AnalysisType =
+                if remaining.contains("unused") {
+                    .unused
+                } else if remaining.contains("duplicates") {
+                    .duplicates
+                } else {
+                    .all
+                }
 
             let binaryPath = try ensureSWABinary(in: context.pluginWorkDirectoryURL)
             let projectDir = context.xcodeProject.directoryURL
@@ -375,7 +382,8 @@ struct SWACommandPlugin: CommandPlugin {
                 return systemPath
             }
 
-            let binaryDir = workDirectory
+            let binaryDir =
+                workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swa")
                 .appendingPathComponent(defaultVersion)
@@ -418,14 +426,16 @@ struct SWACommandPlugin: CommandPlugin {
             try process.run()
             process.waitUntilExit()
 
-            let output = String(
-                data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8,
-            ) ?? ""
-            let errors = String(
-                data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
-                encoding: .utf8,
-            ) ?? ""
+            let output =
+                String(
+                    data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+                    encoding: .utf8,
+                ) ?? ""
+            let errors =
+                String(
+                    data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                    encoding: .utf8,
+                ) ?? ""
 
             if !output.isEmpty { print(output) }
             if !errors.isEmpty { Diagnostics.error(errors) }
@@ -438,9 +448,12 @@ struct SWACommandPlugin: CommandPlugin {
         }
 
         private func downloadSWASync(to binaryDir: URL, version: String) throws {
-            guard let downloadURL = URL(
-                string: "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
-            ) else {
+            guard
+                let downloadURL = URL(
+                    string:
+                        "https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v\(version)/swa-\(version)-macos-universal.tar.gz",
+                )
+            else {
                 throw CommandError.downloadFailed(tool: "swa", statusCode: 0)
             }
 
@@ -514,13 +527,13 @@ enum CommandError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case let .downloadFailed(tool, statusCode):
+        case .downloadFailed(let tool, let statusCode):
             "Failed to download \(tool) (HTTP \(statusCode))"
 
-        case let .extractionFailed(tool):
+        case .extractionFailed(let tool):
             "Failed to extract \(tool) archive"
 
-        case let .analysisFailed(name, exitCode):
+        case .analysisFailed(let name, let exitCode):
             "\(name) failed with exit code \(exitCode)"
         }
     }

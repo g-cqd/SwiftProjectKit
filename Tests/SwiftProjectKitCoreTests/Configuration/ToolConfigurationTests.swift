@@ -12,8 +12,9 @@
 // and their versions. Incorrect defaults cause unexpected behavior.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("ToolConfiguration Tests")
 struct ToolConfigurationTests {
@@ -63,10 +64,10 @@ struct ToolConfigurationTests {
         let config = ToolConfiguration(
             enabled: true,
             version: nil,
-            configPath: ".custom-swiftlint.yml",
+            configPath: ".custom-swift-format",
         )
 
-        #expect(config.configPath == ".custom-swiftlint.yml")
+        #expect(config.configPath == ".custom-swift-format")
     }
 
     @Test("All parameters can be set together")

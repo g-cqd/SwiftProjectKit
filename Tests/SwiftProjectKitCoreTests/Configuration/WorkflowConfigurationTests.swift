@@ -12,8 +12,9 @@
 // Incorrect defaults could lead to missing CI/CD pipelines.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
+
+@testable import SwiftProjectKitCore
 
 @Suite("WorkflowConfiguration Tests")
 struct WorkflowConfigurationTests {

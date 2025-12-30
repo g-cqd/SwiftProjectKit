@@ -24,13 +24,14 @@
 // Binary release features are critical for CLI tool distribution.
 
 import Foundation
-@testable import SwiftProjectKitCore
 import Testing
 import Yams
 
+@testable import SwiftProjectKitCore
+
 // MARK: - CIWorkflowTests
 
-// swiftlint:disable type_body_length
+// swa:ignore-type-length
 @Suite("CI Workflow Tests")
 struct CIWorkflowTests {
     // MARK: Internal
@@ -94,8 +95,8 @@ struct CIWorkflowTests {
         let yaml = try parseWorkflow(name: "TestPackage", platforms: .macOSOnly)
 
         guard let on = yaml["on"] as? [String: Any],
-              let push = on["push"] as? [String: Any],
-              let branches = push["branches"] as? [String]
+            let push = on["push"] as? [String: Any],
+            let branches = push["branches"] as? [String]
         else {
             Issue.record("Push trigger configuration not found")
             return
@@ -142,8 +143,8 @@ struct CIWorkflowTests {
 
     // MARK: - Jobs
 
-    @Test("Has lint job")
-    func hasLintJob() throws {
+    @Test("Has format-check job")
+    func hasFormatCheckJob() throws {
         let yaml = try parseWorkflow(name: "TestPackage", platforms: .macOSOnly)
 
         guard let jobs = yaml["jobs"] as? [String: Any] else {
@@ -151,7 +152,7 @@ struct CIWorkflowTests {
             return
         }
 
-        #expect(jobs["lint"] != nil, "Should have lint job")
+        #expect(jobs["format-check"] != nil, "Should have format-check job")
     }
 
     @Test("Has build-and-test job")
@@ -166,20 +167,13 @@ struct CIWorkflowTests {
         #expect(jobs["build-and-test"] != nil, "Should have build-and-test job")
     }
 
-    // MARK: - Lint Job Steps
+    // MARK: - Format Check Job Steps
 
-    @Test("Lint job runs SwiftLint")
-    func lintJobRunsSwiftLint() throws {
+    @Test("Format check job runs swift-format")
+    func formatCheckJobRunsSwiftFormat() throws {
         let workflow = DefaultConfigs.ciWorkflow(name: "TestPackage", platforms: .macOSOnly)
 
-        #expect(workflow.contains("swiftlint"), "Lint job should run SwiftLint")
-    }
-
-    @Test("Lint job runs SwiftFormat")
-    func lintJobRunsSwiftFormat() throws {
-        let workflow = DefaultConfigs.ciWorkflow(name: "TestPackage", platforms: .macOSOnly)
-
-        #expect(workflow.contains("swiftformat"), "Lint job should run SwiftFormat")
+        #expect(workflow.contains("swift-format lint"), "Format check job should run swift-format")
     }
 
     // MARK: - Build Job
@@ -314,7 +308,7 @@ struct CIWorkflowTests {
         )
 
         guard let on = yaml["on"] as? [String: Any],
-              let push = on["push"] as? [String: Any]
+            let push = on["push"] as? [String: Any]
         else {
             Issue.record("Push trigger not found")
             return
@@ -608,7 +602,7 @@ struct CIWorkflowTests {
             return
         }
 
-        #expect(jobs["lint"] != nil, "Should have lint job")
+        #expect(jobs["format-check"] != nil, "Should have format-check job")
         #expect(jobs["build-and-test"] != nil, "Should have build-and-test job")
         #expect(jobs["codeql"] != nil, "Should have codeql job")
         #expect(jobs["prepare-release"] != nil, "Should have prepare-release job")
@@ -643,8 +637,6 @@ struct CIWorkflowTests {
         return parsed
     }
 }
-
-// swiftlint:enable type_body_length
 
 // MARK: - WorkflowParseError
 

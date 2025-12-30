@@ -1,10 +1,10 @@
-// swiftlint:disable file_length
+// swa:ignore-file-length
 // Template files benefit from keeping related templates together
 import Foundation
 
 // MARK: - Unified CI/CD Workflow
 
-public extension DefaultConfigs {
+extension DefaultConfigs {
     /// Generates a unified CI/CD workflow with conditional release jobs.
     /// - Parameters:
     ///   - name: The project name (used in release notes)
@@ -16,7 +16,7 @@ public extension DefaultConfigs {
     ///   - includeHomebrew: Whether to generate Homebrew formula (default: false, requires includeBinaryRelease)
     ///   - homebrewTap: The Homebrew tap name (e.g., "g-cqd/tap")
     /// - Returns: The complete workflow YAML string
-    static func ciWorkflow(
+    public static func ciWorkflow(
         name: String,
         platforms: PlatformConfiguration,
         includeRelease: Bool = true,
@@ -59,58 +59,64 @@ public extension DefaultConfigs {
 // MARK: - Workflow Header
 
 extension DefaultConfigs {
-    // swiftlint:disable:next function_body_length
+    // swa:ignore-complexity
     static func ciWorkflowHeader(includeRelease: Bool) -> String {
-        let triggers = includeRelease ? """
-        on:
-          push:
-            branches: [main]
-            tags: ['v*']
-          pull_request:
-            branches: [main]
-          workflow_dispatch:
-            inputs:
-              release:
-                description: 'Create release'
-                type: boolean
-                default: false
-              version:
-                description: 'Version override (e.g., 1.0.0)'
-                required: false
-        """ : """
-        on:
-          push:
-            branches: [main]
-          pull_request:
-            branches: [main]
-        """
+        let triggers =
+            includeRelease
+            ? """
+            on:
+              push:
+                branches: [main]
+                tags: ['v*']
+              pull_request:
+                branches: [main]
+              workflow_dispatch:
+                inputs:
+                  release:
+                    description: 'Create release'
+                    type: boolean
+                    default: false
+                  version:
+                    description: 'Version override (e.g., 1.0.0)'
+                    required: false
+            """
+            : """
+            on:
+              push:
+                branches: [main]
+              pull_request:
+                branches: [main]
+            """
 
-        let permissions = includeRelease ? """
-        permissions:
-          contents: write
-          security-events: write
-        """ : """
-        permissions:
-          contents: read
-          security-events: write
-        """
+        let permissions =
+            includeRelease
+            ? """
+            permissions:
+              contents: write
+              security-events: write
+            """
+            : """
+            permissions:
+              contents: read
+              security-events: write
+            """
 
         return """
-        name: CI/CD
+            name: CI/CD
 
-        \(triggers)
+            \(triggers)
 
-        \(permissions)
+            \(permissions)
 
-        concurrency:
-          group: ${{ github.workflow }}-${{ github.ref }}
-          cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+            concurrency:
+              group: ${{ github.workflow }}-${{ github.ref }}
+              cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-        env:
-          XCODE_VERSION: '\(defaultXcodeVersion)'
+            env:
+              XCODE_VERSION: '\(defaultXcodeVersion)'
 
-        jobs:
-        """
+            jobs:
+            """
     }
 }
 
@@ -123,8 +129,8 @@ extension DefaultConfigs {
           # ==========================================================================
           # Stage 1: Code Quality (Always runs)
           # ==========================================================================
-          lint:
-            name: Lint
+          format-check:
+            name: Format Check
             runs-on: macos-15
             steps:
               - uses: actions/checkout@v4
@@ -132,16 +138,8 @@ extension DefaultConfigs {
               - name: Select Xcode
                 run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-              - name: Ensure Linting Tools
-                run: |
-                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
-
-              - name: SwiftLint
-                run: swiftlint lint --strict --reporter github-actions-logging
-
-              - name: SwiftFormat
-                run: swiftformat --lint .
+              - name: Check Formatting
+                run: xcrun swift-format lint --strict --recursive .
 
         """
     }
@@ -149,12 +147,12 @@ extension DefaultConfigs {
     static func ciBuildAndTestJob() -> String {
         """
           # ==========================================================================
-          # Stage 2: Build & Test (Always runs, depends on lint)
+          # Stage 2: Build & Test (Always runs, depends on format check)
           # ==========================================================================
           build-and-test:
             name: Build & Test
             runs-on: macos-15
-            needs: lint
+            needs: format-check
             steps:
               - uses: actions/checkout@v4
 
@@ -169,11 +167,6 @@ extension DefaultConfigs {
                     ~/Library/Developer/Xcode/DerivedData
                   key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
                   restore-keys: spm-${{ runner.os }}-
-
-              - name: Ensure Linting Tools
-                run: |
-                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: Build
                 run: swift build -c release
@@ -184,16 +177,16 @@ extension DefaultConfigs {
         """
     }
 
-    // swiftlint:disable:next function_body_length
+    // swa:ignore-complexity
     static func ciCodeQLJob() -> String {
         """
           # ==========================================================================
-          # Stage 3: Security Analysis (Always runs, depends on lint)
+          # Stage 3: Security Analysis (Always runs, depends on format check)
           # ==========================================================================
           codeql:
             name: CodeQL Analysis
             runs-on: macos-15
-            needs: lint
+            needs: format-check
             steps:
               - uses: actions/checkout@v4
 
@@ -208,11 +201,6 @@ extension DefaultConfigs {
                     ~/Library/Developer/Xcode/DerivedData
                   key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
                   restore-keys: spm-${{ runner.os }}-
-
-              - name: Ensure Linting Tools
-                run: |
-                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
 
               - name: Initialize CodeQL
                 uses: github/codeql-action/init@v4
@@ -231,7 +219,7 @@ extension DefaultConfigs {
         """
     }
 
-    // swiftlint:disable:next function_body_length
+    // swa:ignore-complexity
     static func ciPlatformMatrixJob(
         name: String,
         platforms: PlatformConfiguration,
@@ -239,83 +227,88 @@ extension DefaultConfigs {
         let platformEntries = buildPlatformEntries(platforms: platforms)
 
         return """
-          # ==========================================================================
-          # Stage 4: Platform Matrix Build (PRs and main branch)
-          # ==========================================================================
-          build-platforms:
-            name: Build (${{ matrix.platform }})
-            runs-on: macos-15
-            needs: lint
-            if: >-
-              github.event_name == 'pull_request' ||
-              (github.event_name == 'push' && github.ref == 'refs/heads/main')
-            strategy:
-              matrix:
-                include:
-        \(platformEntries.joined(separator: "\n"))
-            steps:
-              - uses: actions/checkout@v4
+              # ==========================================================================
+              # Stage 4: Platform Matrix Build (PRs and main branch)
+              # ==========================================================================
+              build-platforms:
+                name: Build (${{ matrix.platform }})
+                runs-on: macos-15
+                needs: format-check
+                if: >-
+                  github.event_name == 'pull_request' ||
+                  (github.event_name == 'push' && github.ref == 'refs/heads/main')
+                strategy:
+                  matrix:
+                    include:
+            \(platformEntries.joined(separator: "\n"))
+                steps:
+                  - uses: actions/checkout@v4
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: |
-                    .build
-                    ~/Library/Developer/Xcode/DerivedData
-                  key: spm-${{ runner.os }}-xcode-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-xcode-
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: |
+                        .build
+                        ~/Library/Developer/Xcode/DerivedData
+                      key: spm-${{ runner.os }}-xcode-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-xcode-
 
-              - name: Ensure Linting Tools
-                run: |
-                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
+                  - name: Build for ${{ matrix.platform }}
+                    run: |
+                      xcodebuild build \\
+                        -scheme \(name) \\
+                        -destination '${{ matrix.destination }}' \\
+                        -skipPackagePluginValidation \\
+                        CODE_SIGNING_ALLOWED=NO
 
-              - name: Build for ${{ matrix.platform }}
-                run: |
-                  xcodebuild build \\
-                    -scheme \(name) \\
-                    -destination '${{ matrix.destination }}' \\
-                    -skipPackagePluginValidation \\
-                    CODE_SIGNING_ALLOWED=NO
-
-        """
+            """
     }
 
     static func buildPlatformEntries(platforms: PlatformConfiguration) -> [String] {
         var entries: [String] = []
 
         if platforms.iOS != nil {
-            entries.append("""
-                          - platform: iOS
-                            destination: 'generic/platform=iOS Simulator'
-            """)
+            entries.append(
+                """
+                              - platform: iOS
+                                destination: 'generic/platform=iOS Simulator'
+                """
+            )
         }
         if platforms.macOS != nil {
-            entries.append("""
-                          - platform: macOS
-                            destination: 'platform=macOS'
-            """)
+            entries.append(
+                """
+                              - platform: macOS
+                                destination: 'platform=macOS'
+                """
+            )
         }
         if platforms.tvOS != nil {
-            entries.append("""
-                          - platform: tvOS
-                            destination: 'generic/platform=tvOS Simulator'
-            """)
+            entries.append(
+                """
+                              - platform: tvOS
+                                destination: 'generic/platform=tvOS Simulator'
+                """
+            )
         }
         if platforms.watchOS != nil {
-            entries.append("""
-                          - platform: watchOS
-                            destination: 'generic/platform=watchOS Simulator'
-            """)
+            entries.append(
+                """
+                              - platform: watchOS
+                                destination: 'generic/platform=watchOS Simulator'
+                """
+            )
         }
         if platforms.visionOS != nil {
-            entries.append("""
-                          - platform: visionOS
-                            destination: 'generic/platform=visionOS Simulator'
-            """)
+            entries.append(
+                """
+                              - platform: visionOS
+                                destination: 'generic/platform=visionOS Simulator'
+                """
+            )
         }
 
         return entries
@@ -325,7 +318,7 @@ extension DefaultConfigs {
 // MARK: - Release Jobs
 
 extension DefaultConfigs {
-    // swiftlint:disable:next function_body_length
+    // swa:ignore-complexity
     static func ciPrepareReleaseJob() -> String {
         """
           # ==========================================================================
@@ -419,7 +412,7 @@ extension DefaultConfigs {
         """
     }
 
-    // swiftlint:disable function_body_length
+    // swa:ignore-complexity
     static func ciCreateReleaseJob(name: String) -> String {
         """
           # ==========================================================================
@@ -485,9 +478,7 @@ extension DefaultConfigs {
         """
     }
 
-    // swiftlint:enable function_body_length
-
-    // swiftlint:disable function_body_length
+    // swa:ignore-complexity
     // Creates a release job with universal binary building and packaging for CLI tools
     static func ciCreateBinaryReleaseJob(
         name: String,
@@ -495,200 +486,198 @@ extension DefaultConfigs {
         includeHomebrew: Bool = false,
         homebrewTap: String? = nil,
     ) -> String {
-        let homebrewInstall = if includeHomebrew, let tap = homebrewTap {
-            """
+        let homebrewInstall =
+            if includeHomebrew, let tap = homebrewTap {
+                """
 
-                      **Homebrew:**
-                      \\`\\`\\`bash
-                      brew tap \(tap)
-                      brew install \(binaryName)
-                      \\`\\`\\`
-            """
-        } else {
-            ""
-        }
+                          **Homebrew:**
+                          \\`\\`\\`bash
+                          brew tap \(tap)
+                          brew install \(binaryName)
+                          \\`\\`\\`
+                """
+            } else {
+                ""
+            }
 
-        let homebrewFormulaStep = if includeHomebrew {
-            """
+        let homebrewFormulaStep =
+            if includeHomebrew {
+                """
 
-                  - name: Generate Homebrew Formula
+                      - name: Generate Homebrew Formula
+                        run: |
+                          VERSION="${{ needs.prepare-release.outputs.version }}"
+                          TAG="${{ needs.prepare-release.outputs.tag }}"
+
+                          # Read checksums
+                          ARM64_SHA=$(grep "arm64" release/checksums.txt | awk '{print $1}')
+                          X86_SHA=$(grep "x86_64" release/checksums.txt | awk '{print $1}')
+
+                          cat > release/\(binaryName).rb << FORMULA_EOF
+                          class \(binaryName.capitalized) < Formula
+                            desc "\(name) CLI tool"
+                            homepage "https://github.com/g-cqd/\(name)"
+                            version "${VERSION}"
+                            license "MIT"
+
+                            on_macos do
+                              if Hardware::CPU.arm?
+                                url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
+                                binaryName
+                            )-${VERSION}-macos-arm64.tar.gz"
+                                sha256 "${ARM64_SHA}"
+                              else
+                                url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
+                                binaryName
+                            )-${VERSION}-macos-x86_64.tar.gz"
+                                sha256 "${X86_SHA}"
+                              end
+                            end
+
+                            def install
+                              bin.install "\(binaryName)"
+                            end
+
+                            test do
+                              assert_match version.to_s, shell_output("#{bin}/\(binaryName) --version")
+                            end
+                          end
+                          FORMULA_EOF
+                """
+            } else {
+                ""
+            }
+
+        let formulaFile =
+            includeHomebrew
+            ? """
+
+                    release/\(binaryName).rb
+            """ : ""
+
+        return """
+              # ==========================================================================
+              # Stage 6: Create GitHub Release with Universal Binaries
+              # ==========================================================================
+              release:
+                name: Create Release
+                runs-on: macos-15
+                needs: prepare-release
+                if: needs.prepare-release.outputs.should_release == 'true'
+                steps:
+                  - uses: actions/checkout@v4
+
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: |
+                        .build
+                        ~/Library/Developer/Xcode/DerivedData
+                      key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-
+
+                  - name: Build Universal Binary
+                    run: |
+                      # Build for ARM64
+                      swift build -c release --arch arm64
+                      cp .build/arm64-apple-macosx/release/\(binaryName) .build/\(binaryName)-arm64
+
+                      # Build for x86_64
+                      swift build -c release --arch x86_64
+                      cp .build/x86_64-apple-macosx/release/\(binaryName) .build/\(binaryName)-x86_64
+
+                      # Create universal binary
+                      mkdir -p .build/release
+                      lipo -create -output .build/release/\(binaryName) \\
+                        .build/\(binaryName)-arm64 \\
+                        .build/\(binaryName)-x86_64
+
+                      lipo -info .build/release/\(binaryName)
+
+                  - name: Package Binaries
+                    run: |
+                      VERSION="${{ needs.prepare-release.outputs.version }}"
+                      mkdir -p release
+
+                      for ARCH in universal arm64 x86_64; do
+                        if [[ "$ARCH" == "universal" ]]; then
+                          cp .build/release/\(binaryName) release/\(binaryName)
+                        else
+                          cp .build/\(binaryName)-$ARCH release/\(binaryName)
+                        fi
+                        tar -C release -czvf "release/\(binaryName)-${VERSION}-macos-${ARCH}.tar.gz" \(binaryName)
+                      done
+
+                      cd release && shasum -a 256 *.tar.gz > checksums.txt
+            \(homebrewFormulaStep)
+
+                  - name: Create Tag
+                    if: >-
+                      github.event_name == 'workflow_dispatch' ||
+                      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+                    run: |
+                      git config user.name "github-actions[bot]"
+                      git config user.email "github-actions[bot]@users.noreply.github.com"
+                      git tag -a "${{ needs.prepare-release.outputs.tag }}" \\
+                        -m "Release ${{ needs.prepare-release.outputs.version }}" || true
+                      git push origin "${{ needs.prepare-release.outputs.tag }}" || true
+
+                  - name: Prepare Release Notes
                     run: |
                       VERSION="${{ needs.prepare-release.outputs.version }}"
                       TAG="${{ needs.prepare-release.outputs.tag }}"
+                      cat > release_notes.md << RELEASE_EOF
+                      # \(name) v${VERSION}
 
-                      # Read checksums
-                      ARM64_SHA=$(grep "arm64" release/checksums.txt | awk '{print $1}')
-                      X86_SHA=$(grep "x86_64" release/checksums.txt | awk '{print $1}')
+                      ${{ needs.prepare-release.outputs.changelog }}
 
-                      cat > release/\(binaryName).rb << FORMULA_EOF
-                      class \(binaryName.capitalized) < Formula
-                        desc "\(name) CLI tool"
-                        homepage "https://github.com/g-cqd/\(name)"
-                        version "${VERSION}"
-                        license "MIT"
+                      ---
 
-                        on_macos do
-                          if Hardware::CPU.arm?
-                            url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
-                                binaryName
-                            )-${VERSION}-macos-arm64.tar.gz"
-                            sha256 "${ARM64_SHA}"
-                          else
-                            url "https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
-                                binaryName
-                            )-${VERSION}-macos-x86_64.tar.gz"
-                            sha256 "${X86_SHA}"
-                          end
-                        end
+                      ## Installation
+            \(homebrewInstall)
+                      **Swift Package Manager:**
+                      \\`\\`\\`swift
+                      dependencies: [
+                          .package(url: "https://github.com/g-cqd/\(name).git", from: "${VERSION}")
+                      ]
+                      \\`\\`\\`
 
-                        def install
-                          bin.install "\(binaryName)"
-                        end
-
-                        test do
-                          assert_match version.to_s, shell_output("#{bin}/\(binaryName) --version")
-                        end
-                      end
-                      FORMULA_EOF
-            """
-        } else {
-            ""
-        }
-
-        let formulaFile = includeHomebrew ? """
-
-                release/\(binaryName).rb
-        """ : ""
-
-        return """
-          # ==========================================================================
-          # Stage 6: Create GitHub Release with Universal Binaries
-          # ==========================================================================
-          release:
-            name: Create Release
-            runs-on: macos-15
-            needs: prepare-release
-            if: needs.prepare-release.outputs.should_release == 'true'
-            steps:
-              - uses: actions/checkout@v4
-
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-              - name: Ensure Linting Tools
-                run: |
-                  command -v swiftlint >/dev/null 2>&1 || brew install swiftlint
-                  command -v swiftformat >/dev/null 2>&1 || brew install swiftformat
-
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: |
-                    .build
-                    ~/Library/Developer/Xcode/DerivedData
-                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-
-
-              - name: Build Universal Binary
-                run: |
-                  # Build for ARM64
-                  swift build -c release --arch arm64
-                  cp .build/arm64-apple-macosx/release/\(binaryName) .build/\(binaryName)-arm64
-
-                  # Build for x86_64
-                  swift build -c release --arch x86_64
-                  cp .build/x86_64-apple-macosx/release/\(binaryName) .build/\(binaryName)-x86_64
-
-                  # Create universal binary
-                  mkdir -p .build/release
-                  lipo -create -output .build/release/\(binaryName) \\
-                    .build/\(binaryName)-arm64 \\
-                    .build/\(binaryName)-x86_64
-
-                  lipo -info .build/release/\(binaryName)
-
-              - name: Package Binaries
-                run: |
-                  VERSION="${{ needs.prepare-release.outputs.version }}"
-                  mkdir -p release
-
-                  for ARCH in universal arm64 x86_64; do
-                    if [[ "$ARCH" == "universal" ]]; then
-                      cp .build/release/\(binaryName) release/\(binaryName)
-                    else
-                      cp .build/\(binaryName)-$ARCH release/\(binaryName)
-                    fi
-                    tar -C release -czvf "release/\(binaryName)-${VERSION}-macos-${ARCH}.tar.gz" \(binaryName)
-                  done
-
-                  cd release && shasum -a 256 *.tar.gz > checksums.txt
-        \(homebrewFormulaStep)
-
-              - name: Create Tag
-                if: >-
-                  github.event_name == 'workflow_dispatch' ||
-                  (github.event_name == 'push' && github.ref == 'refs/heads/main')
-                run: |
-                  git config user.name "github-actions[bot]"
-                  git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git tag -a "${{ needs.prepare-release.outputs.tag }}" \\
-                    -m "Release ${{ needs.prepare-release.outputs.version }}" || true
-                  git push origin "${{ needs.prepare-release.outputs.tag }}" || true
-
-              - name: Prepare Release Notes
-                run: |
-                  VERSION="${{ needs.prepare-release.outputs.version }}"
-                  TAG="${{ needs.prepare-release.outputs.tag }}"
-                  cat > release_notes.md << RELEASE_EOF
-                  # \(name) v${VERSION}
-
-                  ${{ needs.prepare-release.outputs.changelog }}
-
-                  ---
-
-                  ## Installation
-        \(homebrewInstall)
-                  **Swift Package Manager:**
-                  \\`\\`\\`swift
-                  dependencies: [
-                      .package(url: "https://github.com/g-cqd/\(name).git", from: "${VERSION}")
-                  ]
-                  \\`\\`\\`
-
-                  **Pre-built Binary (macOS):**
-                  \\`\\`\\`bash
-                  # Universal (Apple Silicon + Intel)
-                  curl -L https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
+                      **Pre-built Binary (macOS):**
+                      \\`\\`\\`bash
+                      # Universal (Apple Silicon + Intel)
+                      curl -L https://github.com/g-cqd/\(name)/releases/download/${TAG}/\(
                       binaryName
                   )-${VERSION}-macos-universal.tar.gz | tar xz
-                  sudo mv \(binaryName) /usr/local/bin/
-                  \\`\\`\\`
+                      sudo mv \(binaryName) /usr/local/bin/
+                      \\`\\`\\`
 
-                  ### Checksums
+                      ### Checksums
 
-                  \\`\\`\\`
-                  $(cat release/checksums.txt)
-                  \\`\\`\\`
+                      \\`\\`\\`
+                      $(cat release/checksums.txt)
+                      \\`\\`\\`
 
-                  RELEASE_EOF
+                      RELEASE_EOF
 
-              - name: Create GitHub Release
-                uses: softprops/action-gh-release@v2
-                with:
-                  tag_name: ${{ needs.prepare-release.outputs.tag }}
-                  name: \(name) ${{ needs.prepare-release.outputs.version }}
-                  body_path: release_notes.md
-                  draft: false
-                  prerelease: >-
-                    ${{ contains(needs.prepare-release.outputs.version, 'alpha') ||
-                        contains(needs.prepare-release.outputs.version, 'beta') ||
-                        contains(needs.prepare-release.outputs.version, 'rc') }}
-                  files: |
-                    release/\(binaryName)-${{ needs.prepare-release.outputs.version }}-macos-*.tar.gz
-                    release/checksums.txt\(formulaFile)
-                env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        """
+                  - name: Create GitHub Release
+                    uses: softprops/action-gh-release@v2
+                    with:
+                      tag_name: ${{ needs.prepare-release.outputs.tag }}
+                      name: \(name) ${{ needs.prepare-release.outputs.version }}
+                      body_path: release_notes.md
+                      draft: false
+                      prerelease: >-
+                        ${{ contains(needs.prepare-release.outputs.version, 'alpha') ||
+                            contains(needs.prepare-release.outputs.version, 'beta') ||
+                            contains(needs.prepare-release.outputs.version, 'rc') }}
+                      files: |
+                        release/\(binaryName)-${{ needs.prepare-release.outputs.version }}-macos-*.tar.gz
+                        release/checksums.txt\(formulaFile)
+                    env:
+                      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            """
     }
-    // swiftlint:enable function_body_length
 }

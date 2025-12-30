@@ -1,4 +1,3 @@
-// swiftlint:disable no_print_statements
 import ArgumentParser
 import Foundation
 import SwiftProjectKitCore
@@ -15,11 +14,8 @@ struct UpdateCommand: AsyncParsableCommand {
     @Option(name: .shortAndLong, help: "Path to the project")
     var path: String = "."
 
-    @Flag(name: .long, help: "Update SwiftLint rules")
-    var swiftlint = false
-
-    @Flag(name: .long, help: "Update SwiftFormat rules")
-    var swiftformat = false
+    @Flag(name: .long, help: "Update swift-format configuration")
+    var format = false
 
     @Flag(name: .long, help: "Update GitHub workflows")
     var workflows = false
@@ -36,24 +32,19 @@ struct UpdateCommand: AsyncParsableCommand {
     func run() async throws {
         let projectURL = URL(fileURLWithPath: path)
 
-        let updateSwiftlint = all || swiftlint
-        let updateSwiftformat = all || swiftformat
+        let updateFormat = all || format
         let updateWorkflows = all || workflows
         let updateClaude = all || claude
 
-        if !updateSwiftlint, !updateSwiftformat, !updateWorkflows, !updateClaude {
+        if !updateFormat, !updateWorkflows, !updateClaude {
             print("No update options specified. Use --all or specific flags.")
-            print("Options: --swiftlint, --swiftformat, --workflows, --claude, --all")
+            print("Options: --format, --workflows, --claude, --all")
             return
         }
 
         print("Updating project at \(projectURL.path)\(dryRun ? " (dry run)" : "")...")
 
-        if updateSwiftlint {
-            try updateSwiftLintConfig(at: projectURL)
-        }
-
-        if updateSwiftformat {
+        if updateFormat {
             try updateSwiftFormatConfig(at: projectURL)
         }
 
@@ -70,23 +61,13 @@ struct UpdateCommand: AsyncParsableCommand {
 
     // MARK: Private
 
-    private func updateSwiftLintConfig(at projectURL: URL) throws {
-        let configPath = projectURL.appendingPathComponent(".swiftlint.yml")
-        if dryRun {
-            print("  Would update .swiftlint.yml")
-        } else {
-            try DefaultConfigs.swiftlint.write(to: configPath, atomically: true, encoding: .utf8)
-            print("  Updated .swiftlint.yml")
-        }
-    }
-
     private func updateSwiftFormatConfig(at projectURL: URL) throws {
-        let configPath = projectURL.appendingPathComponent(".swiftformat")
+        let configPath = projectURL.appendingPathComponent(".swift-format")
         if dryRun {
-            print("  Would update .swiftformat")
+            print("  Would update .swift-format")
         } else {
-            try DefaultConfigs.swiftformat.write(to: configPath, atomically: true, encoding: .utf8)
-            print("  Updated .swiftformat")
+            try DefaultConfigs.swiftFormat.write(to: configPath, atomically: true, encoding: .utf8)
+            print("  Updated .swift-format")
         }
     }
 
@@ -120,9 +101,10 @@ struct UpdateCommand: AsyncParsableCommand {
         var projectName = projectURL.lastPathComponent
 
         if FileManager.default.fileExists(atPath: packageSwiftPath.path),
-           let content = try? String(contentsOf: packageSwiftPath, encoding: .utf8),
-           let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression),
-           let nameRange = content[match].range(of: #""([^"]+)""#, options: .regularExpression) {
+            let content = try? String(contentsOf: packageSwiftPath, encoding: .utf8),
+            let match = content.range(of: #"name:\s*"([^"]+)""#, options: .regularExpression),
+            let nameRange = content[match].range(of: #""([^"]+)""#, options: .regularExpression)
+        {
             projectName = String(content[nameRange].dropFirst().dropLast())
         }
 

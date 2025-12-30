@@ -10,7 +10,7 @@ let package = Package(
         .macOS(.v15),
         .watchOS(.v11),
         .tvOS(.v18),
-        .visionOS(.v2)
+        .visionOS(.v2),
     ],
     products: [
         // Core library with configurations and templates
@@ -25,22 +25,10 @@ let package = Package(
             targets: ["SwiftProjectKitCLI"]
         ),
 
-        // SwiftLint build plugin (runs on every build with Xcode reporting)
-        .plugin(
-            name: "SwiftLintBuildPlugin",
-            targets: ["SwiftLintBuildPlugin"]
-        ),
-
         // SwiftFormat build plugin (runs on every build in lint-only mode)
         .plugin(
             name: "SwiftFormatBuildPlugin",
             targets: ["SwiftFormatBuildPlugin"]
-        ),
-
-        // SwiftLint command plugin (on-demand via `swift package lint`)
-        .plugin(
-            name: "SwiftLintCommandPlugin",
-            targets: ["SwiftLintCommandPlugin"]
         ),
 
         // SwiftFormat command plugin (on-demand via `swift package format-source-code`)
@@ -99,6 +87,7 @@ let package = Package(
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .enableExperimentalFeature("StrictConcurrency"),
+                .enableExperimentalFeature("MemberImportVisibility"),
             ]
         ),
 
@@ -113,16 +102,11 @@ let package = Package(
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .enableExperimentalFeature("StrictConcurrency"),
+                .enableExperimentalFeature("MemberImportVisibility"),
             ]
         ),
 
         // MARK: - Build Plugins
-
-        .plugin(
-            name: "SwiftLintBuildPlugin",
-            capability: .buildTool(),
-            dependencies: []
-        ),
 
         .plugin(
             name: "SwiftFormatBuildPlugin",
@@ -133,32 +117,11 @@ let package = Package(
         // MARK: - Command Plugins
 
         .plugin(
-            name: "SwiftLintCommandPlugin",
-            capability: .command(
-                intent: .custom(
-                    verb: "lint",
-                    description: "Run SwiftLint on Swift source files"
-                ),
-                permissions: [
-                    .allowNetworkConnections(
-                        scope: .all(ports: [443]),
-                        reason: "Download SwiftLint binary from GitHub releases"
-                    ),
-                ]
-            ),
-            dependencies: []
-        ),
-
-        .plugin(
             name: "SwiftFormatCommandPlugin",
             capability: .command(
                 intent: .sourceCodeFormatting,
                 permissions: [
-                    .writeToPackageDirectory(reason: "Format Swift source files in place"),
-                    .allowNetworkConnections(
-                        scope: .all(ports: [443]),
-                        reason: "Download SwiftFormat binary from GitHub releases"
-                    ),
+                    .writeToPackageDirectory(reason: "Format Swift source files in place")
                 ]
             ),
             dependencies: []
@@ -183,7 +146,7 @@ let package = Package(
                     .allowNetworkConnections(
                         scope: .all(ports: [443]),
                         reason: "Download SwiftStaticAnalysis binary from GitHub releases"
-                    ),
+                    )
                 ]
             ),
             dependencies: []
@@ -207,7 +170,7 @@ let package = Package(
                     .allowNetworkConnections(
                         scope: .all(ports: [443]),
                         reason: "Download SwiftStaticAnalysis binary from GitHub releases"
-                    ),
+                    )
                 ]
             ),
             dependencies: []
@@ -231,7 +194,7 @@ let package = Package(
                     .allowNetworkConnections(
                         scope: .all(ports: [443]),
                         reason: "Download SwiftStaticAnalysis binary from GitHub releases"
-                    ),
+                    )
                 ]
             ),
             dependencies: []
@@ -247,6 +210,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
+                .enableExperimentalFeature("StrictConcurrency"),
+                .enableExperimentalFeature("MemberImportVisibility"),
             ]
         ),
     ]
