@@ -334,3 +334,4 @@ To skip hooks for a specific commit: `git commit --no-verify`
 ## License
 
 MIT
+
