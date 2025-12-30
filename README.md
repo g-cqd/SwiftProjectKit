@@ -309,6 +309,22 @@ SwiftProjectKit/
     └── DuplicationCommandPlugin/
 ```
 
+## Contributing
+
+After cloning, install git hooks to ensure code quality:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+This enables pre-commit checks that run automatically before each commit:
+- Code formatting (swift-format)
+- Version consistency
+- Build verification
+- Test suite
+
+To skip hooks for a specific commit: `git commit --no-verify`
+
 ## Requirements
 
 - Swift 6.2+
