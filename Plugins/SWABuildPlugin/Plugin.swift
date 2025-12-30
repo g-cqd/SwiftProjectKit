@@ -28,13 +28,10 @@ struct SWABuildPlugin: BuildToolPlugin {
             return []
         }
 
-        // Ensure swa binary is available
+        // Ensure swa binary is available (fetches latest version)
         let swaPath: URL
         do {
-            swaPath = try await ensureSWA(
-                in: context.pluginWorkDirectoryURL,
-                version: defaultVersion,
-            )
+            swaPath = try await ensureSWA(in: context.pluginWorkDirectoryURL)
         } catch {
             Diagnostics.warning("SwiftStaticAnalysis not available: \(error.localizedDescription)")
             return []
@@ -70,17 +67,18 @@ struct SWABuildPlugin: BuildToolPlugin {
 
     // MARK: Private
 
-    /// Default SwiftStaticAnalysis version to use
-    private let defaultVersion = "0.0.14"
+    /// Minimum supported SwiftStaticAnalysis version (0.0.16+)
+    private let minimumVersion = "0.0.16"
 
-    // MARK: - Private Helpers
-
-    private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
+    private func ensureSWA(in workDirectory: URL) async throws -> URL {
         // First, check if swa is available in PATH (system-installed)
         if let systemPath = findInPath("swa") {
             Diagnostics.remark("Using system-installed swa at \(systemPath.path)")
             return systemPath
         }
+
+        // Fetch the latest version from GitHub (fallback to minimum if fetch fails)
+        let version = await fetchLatestVersion() ?? minimumVersion
 
         let binaryDir =
             workDirectory
@@ -142,6 +140,33 @@ struct SWABuildPlugin: BuildToolPlugin {
         return binaryPath
     }
 
+    /// Fetches the latest release version from GitHub API
+    private func fetchLatestVersion() async -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/g-cqd/SwiftStaticAnalysis/releases/latest") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+            let httpResponse = response as? HTTPURLResponse,
+            httpResponse.statusCode == 200
+        else {
+            return nil
+        }
+
+        // Parse JSON to extract tag_name
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let tagName = json["tag_name"] as? String
+        else {
+            return nil
+        }
+
+        // Remove 'v' prefix if present (e.g., "v0.0.16" -> "0.0.16")
+        return tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+    }
+
     private func findConfigFile(in directory: URL) -> URL? {
         let configNames = [".swa.json", "swa.json"]
         for name in configNames {
@@ -184,17 +209,20 @@ struct SWABuildPlugin: BuildToolPlugin {
                 )
             }
 
-            // Check for cached binary (can't use async in Xcode plugin context)
+            // Fetch latest version (fallback to minimum if fetch fails)
+            let version = fetchLatestVersionSync() ?? minimumVersion
+
+            // Check for cached binary
             let binaryDir = context.pluginWorkDirectoryURL
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swa")
-                .appendingPathComponent(defaultVersion)
+                .appendingPathComponent(version)
             let binaryPath = binaryDir.appendingPathComponent("swa")
 
             // If binary doesn't exist, try to download synchronously
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
                 do {
-                    try downloadSWASync(to: binaryDir, version: defaultVersion)
+                    try downloadSWASync(to: binaryDir, version: version)
                 } catch {
                     Diagnostics.warning("SwiftStaticAnalysis not available: \(error.localizedDescription)")
                     return []
@@ -279,6 +307,36 @@ struct SWABuildPlugin: BuildToolPlugin {
                 [.posixPermissions: 0o755],
                 ofItemAtPath: binaryPath.path,
             )
+        }
+
+        /// Fetches the latest release version from GitHub API (synchronous)
+        private func fetchLatestVersionSync() -> String? {
+            guard let url = URL(string: "https://api.github.com/repos/g-cqd/SwiftStaticAnalysis/releases/latest") else {
+                return nil
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+            let semaphore = DispatchSemaphore(value: 0)
+            var result: String?
+
+            let task = URLSession.shared.dataTask(with: request) { data, response, _ in
+                defer { semaphore.signal() }
+                guard let data,
+                    let httpResponse = response as? HTTPURLResponse,
+                    httpResponse.statusCode == 200,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let tagName = json["tag_name"] as? String
+                else {
+                    return
+                }
+                result = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+            }
+            task.resume()
+            semaphore.wait()
+
+            return result
         }
     }
 #endif

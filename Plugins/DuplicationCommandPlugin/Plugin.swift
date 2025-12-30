@@ -29,11 +29,8 @@ struct DuplicationCommandPlugin: CommandPlugin {
         let algorithm = extractor.extractOption(named: "algorithm").first
         let excludePaths = extractor.extractOption(named: "exclude-paths")
 
-        // Ensure swa binary is available
-        let swaPath = try await ensureSWA(
-            in: context.pluginWorkDirectoryURL,
-            version: defaultVersion,
-        )
+        // Ensure swa binary is available (fetches latest version)
+        let swaPath = try await ensureSWA(in: context.pluginWorkDirectoryURL)
 
         // Determine targets to analyze
         let targets: [Target] =
@@ -71,13 +68,12 @@ struct DuplicationCommandPlugin: CommandPlugin {
         args += ["--format", "text"]
 
         // Default min-tokens for sensible clone detection
-        // Note: --min-tokens 80 crashes swa, using 50 as default
         if let tokens = minTokens {
             args += ["--min-tokens", tokens]
         } else if strict {
             args += ["--min-tokens", "30"]
         } else {
-            args += ["--min-tokens", "50"]
+            args += ["--min-tokens", "100"]
         }
 
         for type in types {
@@ -102,7 +98,8 @@ struct DuplicationCommandPlugin: CommandPlugin {
 
     // MARK: Private
 
-    private let defaultVersion = "0.0.14"
+    /// Minimum supported SwiftStaticAnalysis version (0.0.16+)
+    private let minimumVersion = "0.0.16"
 
     private func runSWA(
         executableURL: URL,
@@ -163,12 +160,15 @@ struct DuplicationCommandPlugin: CommandPlugin {
         print("\(analysisName) completed successfully")
     }
 
-    private func ensureSWA(in workDirectory: URL, version: String) async throws -> URL {
+    private func ensureSWA(in workDirectory: URL) async throws -> URL {
         // First, check if swa is available in PATH
         if let systemPath = findInPath("swa") {
             print("Using system-installed swa at \(systemPath.path)")
             return systemPath
         }
+
+        // Fetch the latest version from GitHub (fallback to minimum if fetch fails)
+        let version = await fetchLatestVersion() ?? minimumVersion
 
         let binaryDir =
             workDirectory
@@ -224,6 +224,31 @@ struct DuplicationCommandPlugin: CommandPlugin {
         return binaryPath
     }
 
+    /// Fetches the latest release version from GitHub API
+    private func fetchLatestVersion() async -> String? {
+        guard let url = URL(string: "https://api.github.com/repos/g-cqd/SwiftStaticAnalysis/releases/latest") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+            let httpResponse = response as? HTTPURLResponse,
+            httpResponse.statusCode == 200
+        else {
+            return nil
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let tagName = json["tag_name"] as? String
+        else {
+            return nil
+        }
+
+        return tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+    }
+
     private func findConfigFile(in directory: URL) -> URL? {
         let configNames = [".swa.json", "swa.json"]
         for name in configNames {
@@ -270,13 +295,12 @@ struct DuplicationCommandPlugin: CommandPlugin {
             args += ["--format", "text"]
 
             // Default min-tokens for sensible clone detection
-            // Note: --min-tokens 80 crashes swa, using 50 as default
             if let tokens = minTokens {
                 args += ["--min-tokens", tokens]
             } else if strict {
                 args += ["--min-tokens", "30"]
             } else {
-                args += ["--min-tokens", "50"]
+                args += ["--min-tokens", "100"]
             }
 
             for type in types {
@@ -332,15 +356,18 @@ struct DuplicationCommandPlugin: CommandPlugin {
                 return systemPath
             }
 
+            // Fetch latest version (fallback to minimum if fetch fails)
+            let version = fetchLatestVersionSync() ?? minimumVersion
+
             let binaryDir =
                 workDirectory
                 .appendingPathComponent("bin")
                 .appendingPathComponent("swa")
-                .appendingPathComponent(defaultVersion)
+                .appendingPathComponent(version)
             let binaryPath = binaryDir.appendingPathComponent("swa")
 
             if !FileManager.default.fileExists(atPath: binaryPath.path) {
-                try downloadSWASync(to: binaryDir, version: defaultVersion)
+                try downloadSWASync(to: binaryDir, version: version)
             }
 
             return binaryPath
@@ -388,6 +415,36 @@ struct DuplicationCommandPlugin: CommandPlugin {
                 [.posixPermissions: 0o755],
                 ofItemAtPath: binaryPath.path,
             )
+        }
+
+        /// Fetches the latest release version from GitHub API (synchronous)
+        private func fetchLatestVersionSync() -> String? {
+            guard let url = URL(string: "https://api.github.com/repos/g-cqd/SwiftStaticAnalysis/releases/latest") else {
+                return nil
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+            let semaphore = DispatchSemaphore(value: 0)
+            var result: String?
+
+            let task = URLSession.shared.dataTask(with: request) { data, response, _ in
+                defer { semaphore.signal() }
+                guard let data,
+                    let httpResponse = response as? HTTPURLResponse,
+                    httpResponse.statusCode == 200,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let tagName = json["tag_name"] as? String
+                else {
+                    return
+                }
+                result = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+            }
+            task.resume()
+            semaphore.wait()
+
+            return result
         }
     }
 #endif
