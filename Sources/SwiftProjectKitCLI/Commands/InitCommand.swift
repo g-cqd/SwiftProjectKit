@@ -55,8 +55,8 @@ struct InitCommand: AsyncParsableCommand {
 
     // MARK: Private
 
-    // swiftlint:disable:next function_body_length
     // swa:ignore
+    // swiftlint:disable function_body_length
     private func createProjectStructure(at outputURL: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
@@ -106,6 +106,8 @@ struct InitCommand: AsyncParsableCommand {
             encoding: .utf8,
         )
     }
+
+    // swiftlint:enable function_body_length
 
     // swiftlint:disable:next function_body_length
     private func createConfigurationFiles(at outputURL: URL) throws {
@@ -245,7 +247,7 @@ struct InitCommand: AsyncParsableCommand {
                     .macOS(.v15),
                 ],
                 dependencies: [
-                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "1.0.0"),
+                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "\(swiftProjectKitVersion)"),
                 ],
                 targets: [
                     .executableTarget(
@@ -281,7 +283,7 @@ struct InitCommand: AsyncParsableCommand {
                     ),
                 ],
                 dependencies: [
-                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "1.0.0"),
+                    .package(url: "https://github.com/g-cqd/SwiftProjectKit.git", from: "\(swiftProjectKitVersion)"),
                 ],
                 targets: [
                     .target(

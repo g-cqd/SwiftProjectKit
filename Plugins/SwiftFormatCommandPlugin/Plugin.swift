@@ -115,11 +115,17 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
+        // SwiftFormat outputs status info to stderr, only treat as error if process failed
         if !output.isEmpty {
             print(output)
         }
         if !errors.isEmpty {
-            Diagnostics.error(errors)
+            if process.terminationStatus != 0 {
+                Diagnostics.error(errors)
+            } else {
+                // Normal output to stderr (e.g., "Running SwiftFormat...")
+                print(errors)
+            }
         }
 
         if process.terminationStatus != 0 {
@@ -289,8 +295,15 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
                 encoding: .utf8,
             ) ?? ""
 
+            // SwiftFormat outputs status info to stderr, only treat as error if process failed
             if !output.isEmpty { print(output) }
-            if !errors.isEmpty { Diagnostics.error(errors) }
+            if !errors.isEmpty {
+                if process.terminationStatus != 0 {
+                    Diagnostics.error(errors)
+                } else {
+                    print(errors)
+                }
+            }
 
             if process.terminationStatus != 0 {
                 throw CommandError.formattingFailed(exitCode: process.terminationStatus)

@@ -267,7 +267,7 @@ struct ProjectConfigurationTests {
         let data = try encoder.encode(config)
         let jsonString = String(data: data, encoding: .utf8) ?? ""
 
-        let newlineCount = jsonString.count(where: { $0 == "\n" })
+        let newlineCount = jsonString.count { $0 == "\n" }
         #expect(newlineCount > 10, "Pretty-printed JSON should have multiple newlines")
     }
 }

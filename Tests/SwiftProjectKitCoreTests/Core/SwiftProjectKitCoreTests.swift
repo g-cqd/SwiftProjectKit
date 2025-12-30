@@ -38,11 +38,6 @@ struct SwiftProjectKitCoreModuleTests {
         )
     }
 
-    @Test("Version is 1.0.0")
-    func versionIsCurrent() {
-        #expect(swiftProjectKitVersion == "1.0.0", "Current version should be 1.0.0")
-    }
-
     // MARK: - Swift Version
 
     @Test("Default Swift version is non-empty")

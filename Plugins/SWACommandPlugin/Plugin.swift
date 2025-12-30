@@ -112,11 +112,11 @@ struct SWACommandPlugin: CommandPlugin {
     ) throws {
         var args = ["unused"]
 
-        // Add target directories
-        for target in targets {
-            if let sourceTarget = target as? SourceModuleTarget {
-                args.append(sourceTarget.directoryURL.path)
-            }
+        // swa only accepts one path - use package directory for multi-target analysis
+        if targets.count == 1, let sourceTarget = targets.first as? SourceModuleTarget {
+            args.append(sourceTarget.directoryURL.path)
+        } else {
+            args.append(context.package.directoryURL.path)
         }
 
         // Check for config file
@@ -148,11 +148,11 @@ struct SWACommandPlugin: CommandPlugin {
     ) throws {
         var args = ["duplicates"]
 
-        // Add target directories
-        for target in targets {
-            if let sourceTarget = target as? SourceModuleTarget {
-                args.append(sourceTarget.directoryURL.path)
-            }
+        // swa only accepts one path - use package directory for multi-target analysis
+        if targets.count == 1, let sourceTarget = targets.first as? SourceModuleTarget {
+            args.append(sourceTarget.directoryURL.path)
+        } else {
+            args.append(context.package.directoryURL.path)
         }
 
         // Check for config file
@@ -205,16 +205,39 @@ struct SWACommandPlugin: CommandPlugin {
         process.standardError = errorPipe
 
         try process.run()
+
+        // Read pipes concurrently to avoid deadlock when buffer fills
+        let group = DispatchGroup()
+        nonisolated(unsafe) var outputData = Data()
+        nonisolated(unsafe) var errorData = Data()
+
+        group.enter()
+        DispatchQueue.global().async {
+            outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global().async {
+            errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            group.leave()
+        }
+
+        group.wait()
         process.waitUntilExit()
 
-        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        let errors = String(data: errorData, encoding: .utf8) ?? ""
 
         if !output.isEmpty {
             print(output)
         }
         if !errors.isEmpty {
-            Diagnostics.error(errors)
+            if process.terminationStatus != 0 {
+                Diagnostics.error(errors)
+            } else {
+                print(errors)
+            }
         }
 
         if process.terminationStatus != 0 {

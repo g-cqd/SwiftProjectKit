@@ -115,11 +115,17 @@ struct SwiftLintCommandPlugin: CommandPlugin {
         let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let errors = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
 
+        // SwiftLint outputs warnings and status info to stderr
         if !output.isEmpty {
             print(output)
         }
         if !errors.isEmpty {
-            Diagnostics.error(errors)
+            if process.terminationStatus != 0 {
+                Diagnostics.error(errors)
+            } else {
+                // Normal output to stderr (warnings, status messages)
+                print(errors)
+            }
         }
 
         if process.terminationStatus != 0 {
@@ -289,8 +295,15 @@ struct SwiftLintCommandPlugin: CommandPlugin {
                 encoding: .utf8,
             ) ?? ""
 
+            // SwiftLint outputs warnings and status info to stderr
             if !output.isEmpty { print(output) }
-            if !errors.isEmpty { Diagnostics.error(errors) }
+            if !errors.isEmpty {
+                if process.terminationStatus != 0 {
+                    Diagnostics.error(errors)
+                } else {
+                    print(errors)
+                }
+            }
 
             if process.terminationStatus != 0 {
                 throw CommandError.lintingFailed(exitCode: process.terminationStatus)
