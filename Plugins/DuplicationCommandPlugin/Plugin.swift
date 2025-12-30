@@ -67,13 +67,12 @@ struct DuplicationCommandPlugin: CommandPlugin {
         // Apply CLI options (override config file)
         args += ["--format", "text"]
 
+        // Note: --min-tokens flag is only added when explicitly requested
+        // due to compatibility issues with some swa versions
         if let tokens = minTokens {
             args += ["--min-tokens", tokens]
         } else if strict {
             args += ["--min-tokens", "30"]
-        } else {
-            // Default to 80 tokens to avoid flagging small switch-case patterns
-            args += ["--min-tokens", "80"]
         }
 
         for type in types {
@@ -384,7 +383,9 @@ struct DuplicationCommandPlugin: CommandPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
     let searchPaths = [
+        homeDir.appendingPathComponent(".local/bin").path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",

@@ -41,12 +41,10 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
         }
 
         // Build arguments for duplication detection
-        // Default to 80 tokens to avoid flagging small switch-case patterns
         var arguments = [
             "duplicates",
             sourceTarget.directoryURL.path,
             "--format", "xcode",
-            "--min-tokens", "80",
         ]
 
         // Check for config file
@@ -287,7 +285,9 @@ struct DuplicationBuildPlugin: BuildToolPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
     let searchPaths = [
+        homeDir.appendingPathComponent(".local/bin").path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",

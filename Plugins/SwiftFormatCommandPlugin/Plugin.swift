@@ -6,6 +6,10 @@ import PackagePlugin
 /// Command plugin that runs swift-format on-demand.
 ///
 /// Usage: `swift package format-source-code [--lint] [--target <target>]`
+///
+/// Options:
+/// - `--lint`: Check formatting without modifying files (exit 1 if issues found)
+/// - `--target <name>`: Format specific target(s) only
 @main
 struct SwiftFormatCommandPlugin: CommandPlugin {
     // MARK: Internal
@@ -17,7 +21,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         // Parse arguments
         var extractor = ArgumentExtractor(arguments)
         let lint = extractor.extractFlag(named: "lint") > 0
-        let recursive = extractor.extractFlag(named: "recursive") > 0
         let targetNames = extractor.extractOption(named: "target")
 
         // Find swift-format
@@ -40,7 +43,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         // Build arguments
         let args = buildFormatArguments(
             lint: lint,
-            recursive: recursive,
             configDirectory: context.package.directoryURL,
             targets: targets,
         )
@@ -58,7 +60,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
 
     private func buildFormatArguments(
         lint: Bool,
-        recursive: Bool,
         configDirectory: URL,
         targets: [Target],
     ) -> [String] {
@@ -74,13 +75,10 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
         }
 
         args.append("--parallel")
+        args.append("--recursive")
 
         if let config = findConfigFile(in: configDirectory) {
             args += ["--configuration", config.path]
-        }
-
-        if recursive {
-            args.append("--recursive")
         }
 
         for target in targets {
@@ -218,17 +216,13 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             }
 
             args.append("--parallel")
+            args.append("--recursive")
 
             if let config = findConfigFile(in: context.xcodeProject.directoryURL) {
                 args += ["--configuration", config.path]
             }
 
-            let swiftFiles = context.xcodeProject.targets
-                .flatMap(\.inputFiles)
-                .filter { $0.url.pathExtension == "swift" }
-                .map(\.url.path)
-
-            args += swiftFiles
+            args.append(context.xcodeProject.directoryURL.path)
             return args
         }
 
@@ -293,7 +287,9 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
     let searchPaths = [
+        homeDir.appendingPathComponent(".local/bin").path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",

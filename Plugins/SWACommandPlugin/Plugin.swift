@@ -163,11 +163,10 @@ struct SWACommandPlugin: CommandPlugin {
 
         args += ["--format", "text"]
 
+        // Note: --min-tokens flag only added for strict mode
+        // due to compatibility issues with some swa versions
         if strict {
             args += ["--min-tokens", "30"]
-        } else {
-            // Default to 80 tokens to avoid flagging small switch-case patterns
-            args += ["--min-tokens", "80"]
         }
 
         try runSWA(
@@ -496,7 +495,9 @@ struct SWACommandPlugin: CommandPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
     let searchPaths = [
+        homeDir.appendingPathComponent(".local/bin").path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",

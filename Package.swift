@@ -88,6 +88,11 @@ let package = Package(
                 .swiftLanguageMode(.v6),
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("MemberImportVisibility"),
+            ],
+            plugins: [
+                .plugin(name: "SwiftFormatBuildPlugin"),
+                .plugin(name: "UnusedCodeBuildPlugin"),
+                .plugin(name: "DuplicationBuildPlugin"),
             ]
         ),
 
@@ -103,6 +108,11 @@ let package = Package(
                 .swiftLanguageMode(.v6),
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("MemberImportVisibility"),
+            ],
+            plugins: [
+                .plugin(name: "SwiftFormatBuildPlugin"),
+                .plugin(name: "UnusedCodeBuildPlugin"),
+                .plugin(name: "DuplicationBuildPlugin"),
             ]
         ),
 
@@ -212,6 +222,11 @@ let package = Package(
                 .swiftLanguageMode(.v6),
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("MemberImportVisibility"),
+            ],
+            plugins: [
+                .plugin(name: "SwiftFormatBuildPlugin"),
+                .plugin(name: "UnusedCodeBuildPlugin"),
+                .plugin(name: "DuplicationBuildPlugin"),
             ]
         ),
     ]

@@ -287,7 +287,9 @@ struct UnusedCodeBuildPlugin: BuildToolPlugin {
 
 /// Find an executable in the system PATH
 private func findInPath(_ executable: String) -> URL? {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser
     let searchPaths = [
+        homeDir.appendingPathComponent(".local/bin").path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",
