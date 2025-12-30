@@ -114,6 +114,7 @@ struct FormatCommand: AsyncParsableCommand {
 enum CLIError: Error, CustomStringConvertible {
     case toolNotFound(String)
 
+    // swa:ignore-unused - Required by CustomStringConvertible protocol
     var description: String {
         switch self {
         case .toolNotFound(let tool):
