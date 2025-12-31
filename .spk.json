@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "swiftVersion": "6.2",
+  "project": {
+    "version": "0.0.20"
+  },
+  "platforms": {
+    "macOS": "15.0"
+  },
+  "hooks": {
+    "fixMode": "safe",
+    "restageFixed": true,
+    "failFast": false,
+    "preCommit": {
+      "enabled": true,
+      "scope": "staged",
+      "parallel": false,
+      "tasks": ["format", "versionSync", "build", "test"]
+    },
+    "prePush": {
+      "enabled": true,
+      "scope": "changed",
+      "baseBranch": "main",
+      "parallel": true,
+      "tasks": ["test", "unused", "duplicates"]
+    },
+    "ci": {
+      "enabled": true,
+      "scope": "all",
+      "parallel": true,
+      "tasks": ["format:check", "versionSync:check", "build", "test", "unused", "duplicates", "checkDocs"]
+    },
+    "tasks": {
+      "format": {
+        "enabled": true,
+        "blocking": true,
+        "paths": ["Sources/", "Tests/", "Plugins/"]
+      },
+      "versionSync": {
+        "enabled": true,
+        "blocking": true,
+        "options": {
+          "syncTargets": [
+            {
+              "file": "Sources/SwiftProjectKitCore/SwiftProjectKitCore.swift",
+              "pattern": "swiftProjectKitVersion = \"(\\d+\\.\\d+\\.\\d+)\""
+            }
+          ]
+        }
+      },
+      "build": {
+        "enabled": true,
+        "blocking": true
+      },
+      "test": {
+        "enabled": true,
+        "blocking": true,
+        "options": {
+          "parallel": true
+        }
+      },
+      "unused": {
+        "enabled": true,
+        "blocking": false,
+        "paths": ["Sources/"],
+        "options": {
+          "mode": "reachability",
+          "sensibleDefaults": true
+        }
+      },
+      "duplicates": {
+        "enabled": true,
+        "blocking": false,
+        "paths": ["Sources/"],
+        "options": {
+          "minTokens": 100
+        }
+      },
+      "checkDocs": {
+        "name": "Check Docs",
+        "command": "ls README.md",
+        "blocking": false,
+        "hooks": ["ci"]
+      }
+    }
+  },
+  "swiftformat": {
+    "enabled": true,
+    "configPath": ".swift-format"
+  },
+  "workflows": {
+    "ci": true,
+    "release": true,
+    "docs": true
+  }
+}

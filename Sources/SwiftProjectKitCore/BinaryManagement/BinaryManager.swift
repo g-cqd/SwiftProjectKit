@@ -11,7 +11,7 @@ public enum ManagedTool: String, Sendable, CaseIterable {
     /// GitHub repository in "owner/repo" format
     public var repository: String {
         switch self {
-        case .swa: "nicklockwood/SwiftStaticAnalysis"
+        case .swa: "g-cqd/SwiftStaticAnalysis"
         }
     }
 
@@ -25,7 +25,7 @@ public enum ManagedTool: String, Sendable, CaseIterable {
     /// Default pinned version
     public var defaultVersion: String {
         switch self {
-        case .swa: "0.1.0"
+        case .swa: "0.0.16"
         }
     }
 
@@ -33,13 +33,13 @@ public enum ManagedTool: String, Sendable, CaseIterable {
     public func assetName(for version: String) -> String {
         switch self {
         case .swa:
-            "swa.zip"
+            "swa-\(version)-macos-universal.tar.gz"
         }
     }
 
     /// Download URL for a specific version
     public func downloadURL(for version: String) -> URL {
-        let tag = version.hasPrefix("v") ? version : version
+        let tag = version.hasPrefix("v") ? version : "v\(version)"
         let asset = assetName(for: version)
         // swift-format-ignore: NeverForceUnwrap
         // URL is constructed from known-valid components
@@ -183,27 +183,57 @@ public actor BinaryManager {
         try fileSystem.createDirectory(at: destinationDir, withIntermediateDirectories: true)
 
         // Download the archive
-        let (localURL, response) = try await networkSession.download(from: downloadURL)
+        let (tempURL, response) = try await networkSession.download(from: downloadURL)
 
         // Validate response
         guard let httpResponse = response as? HTTPURLResponse,
             (200 ... 299).contains(httpResponse.statusCode)
         else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            try? fileSystem.removeItem(at: localURL)
+            try? fileSystem.removeItem(at: tempURL)
             throw BinaryManagerError.downloadFailed(tool: tool, version: version, statusCode: statusCode)
         }
 
+        // Rename temp file to preserve extension for extraction type detection
+        let archiveFilename = downloadURL.lastPathComponent
+        let localURL = tempURL.deletingLastPathComponent().appendingPathComponent(archiveFilename)
+        do {
+            try fileSystem.moveItem(at: tempURL, to: localURL)
+        } catch {
+            // If rename fails, use temp URL directly
+            try await extractAndCleanup(
+                archiveURL: tempURL,
+                destinationDir: destinationDir,
+                tool: tool,
+                version: version
+            )
+            return
+        }
+
+        try await extractAndCleanup(
+            archiveURL: localURL,
+            destinationDir: destinationDir,
+            tool: tool,
+            version: version
+        )
+    }
+
+    private func extractAndCleanup(
+        archiveURL: URL,
+        destinationDir: URL,
+        tool: ManagedTool,
+        version: String
+    ) async throws {
         // Extract the archive
         do {
-            try await archiveExtractor.extract(zipAt: localURL, to: destinationDir)
+            try await archiveExtractor.extract(zipAt: archiveURL, to: destinationDir)
         } catch {
-            try? fileSystem.removeItem(at: localURL)
+            try? fileSystem.removeItem(at: archiveURL)
             throw BinaryManagerError.extractionFailed(tool: tool, reason: error.localizedDescription)
         }
 
         // Clean up downloaded archive
-        try? fileSystem.removeItem(at: localURL)
+        try? fileSystem.removeItem(at: archiveURL)
 
         // Make binary executable
         let binaryURL = binaryPath(for: tool, version: version)
