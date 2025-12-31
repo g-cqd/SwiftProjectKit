@@ -49,11 +49,23 @@ public struct FormatTask: HookTask {
         var args = ["format", "lint", "--strict", "--parallel"]
         args += files
 
-        let (output, exitCode) = try await Shell.runWithExitCode(
-            "swift",
-            arguments: args,
-            in: context.projectRoot
-        )
+        let output: String
+        let exitCode: Int32
+
+        if context.verbose {
+            (output, exitCode) = try await Shell.runStreamingWithOutput(
+                "swift",
+                arguments: args,
+                in: context.projectRoot,
+                onOutput: verboseOutputHandler
+            )
+        } else {
+            (output, exitCode) = try await Shell.runWithExitCode(
+                "swift",
+                arguments: args,
+                in: context.projectRoot
+            )
+        }
 
         let duration = ContinuousClock.now - startTime
 
@@ -81,11 +93,20 @@ public struct FormatTask: HookTask {
         var args = ["format", "format", "--in-place", "--parallel"]
         args += files
 
-        _ = try await Shell.run(
-            "swift",
-            arguments: args,
-            in: context.projectRoot
-        )
+        if context.verbose {
+            _ = try await Shell.runStreaming(
+                "swift",
+                arguments: args,
+                in: context.projectRoot,
+                onOutput: verboseOutputHandler
+            )
+        } else {
+            _ = try await Shell.run(
+                "swift",
+                arguments: args,
+                in: context.projectRoot
+            )
+        }
 
         // Determine which files were actually modified
         // For simplicity, we'll return all files as potentially modified
@@ -94,6 +115,13 @@ public struct FormatTask: HookTask {
             filesModified: files,
             fixesApplied: files.count
         )
+    }
+
+    // MARK: - Verbose Output
+
+    private func verboseOutputHandler(_ line: String, _ type: OutputType) {
+        print("\(type.prefix) \(line)")
+        fflush(stdout)
     }
 
     // MARK: - Private

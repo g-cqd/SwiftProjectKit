@@ -33,11 +33,23 @@ public struct BuildTask: HookTask {
 
         let args = ["build", "-c", configuration]
 
-        let (output, exitCode) = try await Shell.runWithExitCode(
-            "swift",
-            arguments: args,
-            in: context.projectRoot
-        )
+        let output: String
+        let exitCode: Int32
+
+        if context.verbose {
+            (output, exitCode) = try await Shell.runStreamingWithOutput(
+                "swift",
+                arguments: args,
+                in: context.projectRoot,
+                onOutput: verboseOutputHandler
+            )
+        } else {
+            (output, exitCode) = try await Shell.runWithExitCode(
+                "swift",
+                arguments: args,
+                in: context.projectRoot
+            )
+        }
 
         let duration = ContinuousClock.now - startTime
 
@@ -47,6 +59,13 @@ public struct BuildTask: HookTask {
 
         let diagnostics = parseBuildOutput(output)
         return .failed(diagnostics: diagnostics, duration: duration)
+    }
+
+    // MARK: - Verbose Output
+
+    private func verboseOutputHandler(_ line: String, _ type: OutputType) {
+        print("\(type.prefix) \(line)")
+        fflush(stdout)
     }
 
     // MARK: - Private
@@ -138,11 +157,23 @@ public struct TestTask: HookTask {
             args += ["--filter", filter]
         }
 
-        let (output, exitCode) = try await Shell.runWithExitCode(
-            "swift",
-            arguments: args,
-            in: context.projectRoot
-        )
+        let output: String
+        let exitCode: Int32
+
+        if context.verbose {
+            (output, exitCode) = try await Shell.runStreamingWithOutput(
+                "swift",
+                arguments: args,
+                in: context.projectRoot,
+                onOutput: verboseOutputHandler
+            )
+        } else {
+            (output, exitCode) = try await Shell.runWithExitCode(
+                "swift",
+                arguments: args,
+                in: context.projectRoot
+            )
+        }
 
         let duration = ContinuousClock.now - startTime
 
@@ -152,6 +183,13 @@ public struct TestTask: HookTask {
 
         let diagnostics = parseTestOutput(output)
         return .failed(diagnostics: diagnostics, duration: duration)
+    }
+
+    // MARK: - Verbose Output
+
+    private func verboseOutputHandler(_ line: String, _ type: OutputType) {
+        print("\(type.prefix) \(line)")
+        fflush(stdout)
     }
 
     // MARK: - Private

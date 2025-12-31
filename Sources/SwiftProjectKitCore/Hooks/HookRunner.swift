@@ -25,17 +25,20 @@ public actor HookRunner {
     private let gitIndex: GitIndex
     private let registeredTasks: [String: any HookTask]
     private let output: HookOutput
+    private let verbose: Bool
 
     public init(
         projectRoot: URL,
         config: HooksConfiguration,
         tasks: [any HookTask] = [],
-        output: HookOutput = ConsoleHookOutput()
+        output: HookOutput = ConsoleHookOutput(),
+        verbose: Bool = false
     ) {
         self.projectRoot = projectRoot
         self.config = config
         gitIndex = GitIndex(projectRoot: projectRoot)
         self.output = output
+        self.verbose = verbose
 
         // Register tasks by ID
         var taskMap: [String: any HookTask] = [:]
@@ -206,7 +209,8 @@ public actor HookRunner {
             isCI: hook == .ci,
             hookType: hook,
             fixMode: fixMode,
-            gitIndex: gitIndex
+            gitIndex: gitIndex,
+            verbose: verbose
         )
     }
 

@@ -67,11 +67,21 @@ public struct UnusedTask: HookTask {
             args.append("--sensible-defaults")
         }
 
-        let result = try await runProcess(
-            executableURL: swaPath,
-            arguments: args,
-            currentDirectory: context.projectRoot
-        )
+        let result: (output: String, exitCode: Int32)
+
+        if context.verbose {
+            result = try await runProcessStreaming(
+                executableURL: swaPath,
+                arguments: args,
+                currentDirectory: context.projectRoot
+            )
+        } else {
+            result = try await runProcess(
+                executableURL: swaPath,
+                arguments: args,
+                currentDirectory: context.projectRoot
+            )
+        }
 
         let duration = clock.now - start
 
@@ -147,6 +157,50 @@ public struct UnusedTask: HookTask {
         let errors = String(data: errorData, encoding: .utf8) ?? ""
 
         return (output + errors, process.terminationStatus)
+    }
+
+    private func runProcessStreaming(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectory: URL
+    ) async throws -> (output: String, exitCode: Int32) {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+
+        // Stream and collect output
+        async let stdoutLines = streamAndCollect(stdoutPipe, type: .stdout)
+        async let stderrLines = streamAndCollect(stderrPipe, type: .stderr)
+
+        let (stdout, stderr) = await (stdoutLines, stderrLines)
+
+        process.waitUntilExit()
+
+        let output = (stdout + stderr).joined(separator: "\n")
+        return (output, process.terminationStatus)
+    }
+
+    private func streamAndCollect(_ pipe: Pipe, type: OutputType) async -> [String] {
+        var lines: [String] = []
+        let handle = pipe.fileHandleForReading
+        do {
+            for try await line in handle.bytes.lines {
+                print("\(type.prefix) \(line)")
+                fflush(stdout)
+                lines.append(line)
+            }
+        } catch {
+            // Ignore errors when reading from pipe (process may have terminated)
+        }
+        return lines
     }
 
     private func parseOutput(_ output: String, projectRoot: URL) -> [HookDiagnostic] {
@@ -250,11 +304,21 @@ public struct DuplicatesTask: HookTask {
         args += ["--min-tokens", String(minTokens)]
         args += ["--format", "text"]
 
-        let result = try await runProcess(
-            executableURL: swaPath,
-            arguments: args,
-            currentDirectory: context.projectRoot
-        )
+        let result: (output: String, exitCode: Int32)
+
+        if context.verbose {
+            result = try await runProcessStreaming(
+                executableURL: swaPath,
+                arguments: args,
+                currentDirectory: context.projectRoot
+            )
+        } else {
+            result = try await runProcess(
+                executableURL: swaPath,
+                arguments: args,
+                currentDirectory: context.projectRoot
+            )
+        }
 
         let duration = clock.now - start
 
@@ -330,6 +394,50 @@ public struct DuplicatesTask: HookTask {
         let errors = String(data: errorData, encoding: .utf8) ?? ""
 
         return (output + errors, process.terminationStatus)
+    }
+
+    private func runProcessStreaming(
+        executableURL: URL,
+        arguments: [String],
+        currentDirectory: URL
+    ) async throws -> (output: String, exitCode: Int32) {
+        let process = Process()
+        process.executableURL = executableURL
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+
+        // Stream and collect output
+        async let stdoutLines = streamAndCollect(stdoutPipe, type: .stdout)
+        async let stderrLines = streamAndCollect(stderrPipe, type: .stderr)
+
+        let (stdout, stderr) = await (stdoutLines, stderrLines)
+
+        process.waitUntilExit()
+
+        let output = (stdout + stderr).joined(separator: "\n")
+        return (output, process.terminationStatus)
+    }
+
+    private func streamAndCollect(_ pipe: Pipe, type: OutputType) async -> [String] {
+        var lines: [String] = []
+        let handle = pipe.fileHandleForReading
+        do {
+            for try await line in handle.bytes.lines {
+                print("\(type.prefix) \(line)")
+                fflush(stdout)
+                lines.append(line)
+            }
+        } catch {
+            // Ignore errors when reading from pipe (process may have terminated)
+        }
+        return lines
     }
 
     private func parseOutput(_ output: String) -> [HookDiagnostic] {

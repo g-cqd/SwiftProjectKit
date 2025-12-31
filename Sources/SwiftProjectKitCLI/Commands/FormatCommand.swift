@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import SwiftProjectKitCore
 
 struct FormatCommand: AsyncParsableCommand {
     // swa:ignore-unused
@@ -17,12 +18,17 @@ struct FormatCommand: AsyncParsableCommand {
     @Flag(name: .long, inversion: .prefixedNo, help: "Process files recursively")
     var recursive = true
 
+    @Flag(name: .shortAndLong, help: "Show verbose output (stream process stdout/stderr)")
+    var verbose = false
+
     func run() async throws {
         let projectURL = URL(fileURLWithPath: path)
 
         // Find swift-format via xcrun
         let swiftFormatPath = try findSwiftFormat()
-        print("Using swift-format at \(swiftFormatPath.path)")
+        if verbose {
+            print("Using swift-format at \(swiftFormatPath.path)")
+        }
 
         // Build arguments
         var args: [String] = []
@@ -52,18 +58,32 @@ struct FormatCommand: AsyncParsableCommand {
 
         print("Running swift-format\(lint ? " (lint mode)" : "")...")
 
-        let process = Process()
-        process.executableURL = swiftFormatPath
-        process.arguments = args
-        process.currentDirectoryURL = projectURL
+        let exitCode: Int32
 
-        try process.run()
-        process.waitUntilExit()
+        if verbose {
+            exitCode = try await Shell.runStreaming(
+                swiftFormatPath.path,
+                arguments: args,
+                in: projectURL,
+                onOutput: { line, type in
+                    print("\(type.prefix) \(line)")
+                }
+            )
+        } else {
+            let process = Process()
+            process.executableURL = swiftFormatPath
+            process.arguments = args
+            process.currentDirectoryURL = projectURL
+
+            try process.run()
+            process.waitUntilExit()
+            exitCode = process.terminationStatus
+        }
 
         let action = lint ? "checked" : "formatted"
-        guard process.terminationStatus == 0 else {
-            print("swift-format found issues (exit code: \(process.terminationStatus))")
-            throw ExitCode(process.terminationStatus)
+        guard exitCode == 0 else {
+            print("swift-format found issues (exit code: \(exitCode))")
+            throw ExitCode(exitCode)
         }
         print("swift-format \(action) successfully")
     }

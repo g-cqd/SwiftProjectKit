@@ -171,6 +171,21 @@ public actor GitIndex {
     }
 }
 
+// MARK: - OutputType
+
+/// Type of output from a shell command
+public enum OutputType: Sendable {
+    case stdout
+    case stderr
+
+    public var prefix: String {
+        switch self {
+        case .stdout: "[stdout]"
+        case .stderr: "[stderr]"
+        }
+    }
+}
+
 // MARK: - Shell
 
 /// Simple shell command executor
@@ -235,6 +250,123 @@ public enum Shell {
         let output = String(data: data, encoding: .utf8) ?? ""
 
         return (output, process.terminationStatus)
+    }
+
+    /// Run a command with streaming output (for verbose mode)
+    ///
+    /// Streams stdout and stderr line-by-line via callback, allowing real-time output display.
+    /// Returns exit code without throwing on non-zero.
+    public static func runStreaming(
+        _ command: String,
+        arguments: [String] = [],
+        in directory: URL? = nil,
+        onOutput: @escaping @Sendable (String, OutputType) -> Void
+    ) async throws -> Int32 {
+        let process = Process()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [command] + arguments
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        if let directory {
+            process.currentDirectoryURL = directory
+        }
+
+        try process.run()
+
+        // Stream output using async bytes
+        async let stdoutTask: () = streamPipe(stdoutPipe, type: .stdout, onOutput: onOutput)
+        async let stderrTask: () = streamPipe(stderrPipe, type: .stderr, onOutput: onOutput)
+
+        // Wait for both streams to complete
+        _ = await (stdoutTask, stderrTask)
+
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    /// Run a command with streaming output and also collect it
+    ///
+    /// Streams stdout and stderr line-by-line via callback while also collecting the full output.
+    /// Returns both collected output and exit code.
+    public static func runStreamingWithOutput(
+        _ command: String,
+        arguments: [String] = [],
+        in directory: URL? = nil,
+        onOutput: @escaping @Sendable (String, OutputType) -> Void
+    ) async throws -> (output: String, exitCode: Int32) {
+        let process = Process()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [command] + arguments
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        if let directory {
+            process.currentDirectoryURL = directory
+        }
+
+        try process.run()
+
+        // Stream and collect output using async bytes
+        async let stdoutLines: [String] = streamAndCollectPipe(
+            stdoutPipe,
+            type: .stdout,
+            onOutput: onOutput
+        )
+        async let stderrLines: [String] = streamAndCollectPipe(
+            stderrPipe,
+            type: .stderr,
+            onOutput: onOutput
+        )
+
+        // Wait for both streams to complete
+        let (stdout, stderr) = await (stdoutLines, stderrLines)
+
+        process.waitUntilExit()
+
+        let output = (stdout + stderr).joined(separator: "\n")
+        return (output, process.terminationStatus)
+    }
+
+    // MARK: - Private Helpers
+
+    private static func streamPipe(
+        _ pipe: Pipe,
+        type: OutputType,
+        onOutput: @escaping @Sendable (String, OutputType) -> Void
+    ) async {
+        let handle = pipe.fileHandleForReading
+        do {
+            for try await line in handle.bytes.lines {
+                onOutput(line, type)
+            }
+        } catch {
+            // Ignore errors when reading from pipe (process may have terminated)
+        }
+    }
+
+    private static func streamAndCollectPipe(
+        _ pipe: Pipe,
+        type: OutputType,
+        onOutput: @escaping @Sendable (String, OutputType) -> Void
+    ) async -> [String] {
+        var lines: [String] = []
+        let handle = pipe.fileHandleForReading
+        do {
+            for try await line in handle.bytes.lines {
+                onOutput(line, type)
+                lines.append(line)
+            }
+        } catch {
+            // Ignore errors when reading from pipe (process may have terminated)
+        }
+        return lines
     }
 }
 

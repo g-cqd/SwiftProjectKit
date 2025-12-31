@@ -70,11 +70,23 @@ public struct ShellTask: HookTask {
 
         let args = Array(parts.dropFirst())
 
-        let (output, exitCode) = try await Shell.runWithExitCode(
-            executable,
-            arguments: args,
-            in: context.projectRoot
-        )
+        let output: String
+        let exitCode: Int32
+
+        if context.verbose {
+            (output, exitCode) = try await Shell.runStreamingWithOutput(
+                executable,
+                arguments: args,
+                in: context.projectRoot,
+                onOutput: verboseOutputHandler
+            )
+        } else {
+            (output, exitCode) = try await Shell.runWithExitCode(
+                executable,
+                arguments: args,
+                in: context.projectRoot
+            )
+        }
 
         let duration = ContinuousClock.now - startTime
 
@@ -117,11 +129,27 @@ public struct ShellTask: HookTask {
         let args = Array(parts.dropFirst())
 
         do {
-            _ = try await Shell.run(executable, arguments: args, in: context.projectRoot)
+            if context.verbose {
+                _ = try await Shell.runStreaming(
+                    executable,
+                    arguments: args,
+                    in: context.projectRoot,
+                    onOutput: verboseOutputHandler
+                )
+            } else {
+                _ = try await Shell.run(executable, arguments: args, in: context.projectRoot)
+            }
             return FixResult(fixesApplied: 1)
         } catch {
             return FixResult(errors: [error.localizedDescription])
         }
+    }
+
+    // MARK: - Verbose Output
+
+    private func verboseOutputHandler(_ line: String, _ type: OutputType) {
+        print("\(type.prefix) \(line)")
+        fflush(stdout)
     }
 
     // MARK: - Private

@@ -118,6 +118,9 @@ public struct HookContext: Sendable {
     /// Git index for reading staged content
     public let gitIndex: GitIndex
 
+    /// Whether to output verbose information (stream process output)
+    public let verbose: Bool
+
     public init(
         projectRoot: URL,
         scope: HookScope,
@@ -127,7 +130,8 @@ public struct HookContext: Sendable {
         isCI: Bool = false,
         hookType: HookType,
         fixMode: FixMode = .safe,
-        gitIndex: GitIndex
+        gitIndex: GitIndex,
+        verbose: Bool = false
     ) {
         self.projectRoot = projectRoot
         self.scope = scope
@@ -138,6 +142,7 @@ public struct HookContext: Sendable {
         self.hookType = hookType
         self.fixMode = fixMode
         self.gitIndex = gitIndex
+        self.verbose = verbose
     }
 
     /// Get the files to check based on scope

@@ -147,7 +147,7 @@ struct RunCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Only run specific tasks (comma-separated)")
     var only: String?
 
-    @Flag(name: .long, help: "Show verbose output")
+    @Flag(name: .shortAndLong, help: "Show verbose output (stream process stdout/stderr)")
     var verbose = false
 
     func run() async throws {
@@ -197,7 +197,8 @@ struct RunCommand: AsyncParsableCommand {
         let runner = HookRunner(
             projectRoot: projectRoot,
             config: config,
-            tasks: tasks
+            tasks: tasks,
+            verbose: verbose
         )
 
         // Run hooks
@@ -457,6 +458,9 @@ struct FixCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Only fix specific tasks (comma-separated)")
     var only: String?
 
+    @Flag(name: .shortAndLong, help: "Show verbose output (stream process stdout/stderr)")
+    var verbose = false
+
     func run() async throws {
         let fixMode: FixMode
         switch mode.lowercased() {
@@ -481,7 +485,8 @@ struct FixCommand: AsyncParsableCommand {
         let runner = HookRunner(
             projectRoot: projectRoot,
             config: config,
-            tasks: tasks
+            tasks: tasks,
+            verbose: verbose
         )
 
         let results = try await runner.fix(fixMode: fixMode)
