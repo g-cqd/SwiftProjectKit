@@ -15,6 +15,7 @@ extension DefaultConfigs {
     ///   - binaryName: The executable name to package (defaults to lowercased project name)
     ///   - includeHomebrew: Whether to generate Homebrew formula (default: false, requires includeBinaryRelease)
     ///   - homebrewTap: The Homebrew tap name (e.g., "g-cqd/tap")
+    ///   - useSpk: Whether to use spk for CI tasks (format, build, test via hooks)
     /// - Returns: The complete workflow YAML string
     public static func ciWorkflow(
         name: String,
@@ -25,12 +26,20 @@ extension DefaultConfigs {
         binaryName: String? = nil,
         includeHomebrew: Bool = false,
         homebrewTap: String? = nil,
+        useSpk: Bool = false
     ) -> String {
         let resolvedBinaryName = binaryName ?? name.lowercased()
 
         var workflow = ciWorkflowHeader(includeRelease: includeRelease)
-        workflow += ciLintJob()
-        workflow += ciBuildAndTestJob()
+
+        if useSpk {
+            workflow += ciSpkLintJob()
+            workflow += ciSpkBuildAndTestJob()
+        } else {
+            workflow += ciLintJob()
+            workflow += ciBuildAndTestJob()
+        }
+
         workflow += ciCodeQLJob()
 
         // Only include platform matrix if explicitly requested AND multiple platforms configured
@@ -123,6 +132,46 @@ extension DefaultConfigs {
 // MARK: - CI Jobs
 
 extension DefaultConfigs {
+    /// Reusable step to setup spk binary (download or build)
+    static func setupSpkStep(binaryName: String = "spk") -> String {
+        """
+              - name: Setup SPK
+                id: setup-spk
+                run: |
+                  # Try to get version from .spk.json
+                  if command -v jq &> /dev/null && [[ -f ".spk.json" ]]; then
+                    SPK_VERSION=$(jq -r '.project.version // empty' .spk.json 2>/dev/null || echo "")
+                  fi
+
+                  SPK_BINARY=".build/debug/\(binaryName)"
+                  SPK_AVAILABLE=false
+
+                  # Try to download pre-built binary if version is available
+                  if [[ -n "$SPK_VERSION" ]]; then
+                    DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/v${SPK_VERSION}/\(
+            binaryName
+        )-${SPK_VERSION}-macos-universal.tar.gz"
+                    echo "Attempting to download spk v${SPK_VERSION}..."
+                    if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
+                      mkdir -p .build/debug
+                      tar -xzf /tmp/spk.tar.gz -C .build/debug
+                      chmod +x "$SPK_BINARY"
+                      SPK_AVAILABLE=true
+                      echo "Downloaded spk v${SPK_VERSION}"
+                    fi
+                  fi
+
+                  # Fall back to building from source
+                  if [[ "$SPK_AVAILABLE" != "true" ]]; then
+                    echo "Building spk from source..."
+                    swift build --product \(binaryName)
+                    echo "Built spk from source"
+                  fi
+
+                  echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
+        """
+    }
+
     static func ciLintJob() -> String {
         """
 
@@ -140,6 +189,37 @@ extension DefaultConfigs {
 
               - name: Check Formatting
                 run: xcrun swift-format lint --strict --recursive .
+
+        """
+    }
+
+    /// SPK-based lint job using spk format
+    static func ciSpkLintJob() -> String {
+        """
+
+          # ==========================================================================
+          # Stage 1: Code Quality (Always runs)
+          # ==========================================================================
+          format-check:
+            name: Format Check
+            runs-on: macos-15
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Cache SPM Dependencies
+                uses: actions/cache@v4
+                with:
+                  path: .build
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: spm-${{ runner.os }}-
+
+        \(setupSpkStep())
+
+              - name: Check Formatting
+                run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
 
         """
     }
@@ -173,6 +253,38 @@ extension DefaultConfigs {
 
               - name: Run Tests
                 run: swift test --parallel
+
+        """
+    }
+
+    /// SPK-based build and test job using hooks
+    static func ciSpkBuildAndTestJob() -> String {
+        """
+          # ==========================================================================
+          # Stage 2: Build & Test (Always runs, depends on format check)
+          # ==========================================================================
+          build-and-test:
+            name: Build & Test
+            runs-on: macos-15
+            needs: format-check
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Cache SPM Dependencies
+                uses: actions/cache@v4
+                with:
+                  path: .build
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: spm-${{ runner.os }}-
+
+        \(setupSpkStep())
+
+              - name: Run CI Hooks
+                run: |
+                  ${{ steps.setup-spk.outputs.spk_path }} hooks run ci --fix none
 
         """
     }
@@ -326,7 +438,7 @@ extension DefaultConfigs {
           # ==========================================================================
           prepare-release:
             name: Prepare Release
-            runs-on: ubuntu-latest
+            runs-on: macos-15
             needs: build-and-test
             if: >-
               startsWith(github.ref, 'refs/tags/v') ||
@@ -342,18 +454,34 @@ extension DefaultConfigs {
                 with:
                   fetch-depth: 0
 
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Cache SPM Dependencies
+                uses: actions/cache@v4
+                with:
+                  path: .build
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: spm-${{ runner.os }}-
+
+        \(setupSpkStep())
+
               - name: Determine Version
                 id: version
                 run: |
-                  # Read version from VERSION file (single source of truth)
-                  if [[ -f "VERSION" ]]; then
+                  # Try spk version first, fall back to .spk.json parsing, then VERSION file
+                  if VERSION=$(${{ steps.setup-spk.outputs.spk_path }} version --quiet 2>/dev/null); then
+                    echo "Got version from spk: ${VERSION}"
+                  elif [[ -f ".spk.json" ]] && command -v jq &> /dev/null; then
+                    VERSION=$(jq -r '.project.version // empty' .spk.json)
+                  elif [[ -f "VERSION" ]]; then
                     VERSION=$(cat VERSION | tr -d '[:space:]')
                   elif [[ -n "${{ inputs.version }}" ]]; then
                     VERSION="${{ inputs.version }}"
                   elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
                     VERSION="${GITHUB_REF#refs/tags/v}"
                   else
-                    echo "No VERSION file found and no version specified"
+                    echo "No version source found"
                     exit 1
                   fi
 
