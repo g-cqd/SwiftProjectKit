@@ -44,6 +44,10 @@
             {
               "file": "Sources/SwiftProjectKitCore/SwiftProjectKitCore.swift",
               "pattern": "swiftProjectKitVersion = \"(\\d+\\.\\d+\\.\\d+)\""
+            },
+            {
+              "file": "README.md",
+              "pattern": "\\.package\\(url: \"https://github\\.com/g-cqd/SwiftProjectKit\\.git\", from: \"(\\d+\\.\\d+\\.\\d+)\"\\)"
             }
           ]
         }
