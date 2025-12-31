@@ -2,7 +2,7 @@
   "version": "1.0",
   "swiftVersion": "6.2",
   "project": {
-    "version": "0.0.20"
+    "version": "0.0.21"
   },
   "platforms": {
     "macOS": "15.0"
