@@ -446,7 +446,8 @@ public struct ConsoleHookOutput: HookOutput {
     }
 
     public func taskStart(_ name: String) async {
-        // Could show spinner here
+        print("\u{001B}[0;36m▶ Running \(name)...\u{001B}[0m")
+        fflush(stdout)
     }
 
     public func taskComplete(_ name: String, status: TaskStatus, duration: Duration?, message: String?) async {

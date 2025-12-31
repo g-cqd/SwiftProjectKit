@@ -48,12 +48,27 @@ struct SetupCommand: AsyncParsableCommand {
         let preCommitContent = """
             #!/bin/sh
             # SwiftProjectKit pre-commit hook
-            # Build if needed, then run hooks
-            SPK=".build/debug/spk"
-            if [ ! -x "$SPK" ] || [ "Package.swift" -nt "$SPK" ]; then
-                swift build --product spk 2>/dev/null
+
+            # Use global spk if available, otherwise download latest release
+            if command -v spk >/dev/null 2>&1; then
+                exec spk hooks run pre-commit
+            else
+                SPK=".build/spk"
+                if [ ! -x "$SPK" ]; then
+                    echo "Downloading latest spk..."
+                    mkdir -p .build
+                    ARCH=$(uname -m)
+                    case "$ARCH" in
+                        arm64) SUFFIX="macos-arm64" ;;
+                        x86_64) SUFFIX="macos-x86_64" ;;
+                        *) SUFFIX="macos-universal" ;;
+                    esac
+                    LATEST_URL=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\\///' | tr -d '\\r\\n')
+                    curl -sL "https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_URL}/spk-${LATEST_URL#v}-${SUFFIX}.tar.gz" | tar -xzf - -C .build
+                    chmod +x "$SPK"
+                fi
+                exec "$SPK" hooks run pre-commit
             fi
-            exec "$SPK" hooks run pre-commit
             """
         try preCommitContent.write(to: preCommitPath, atomically: true, encoding: .utf8)
 
@@ -68,11 +83,27 @@ struct SetupCommand: AsyncParsableCommand {
         let prePushContent = """
             #!/bin/sh
             # SwiftProjectKit pre-push hook
-            SPK=".build/debug/spk"
-            if [ ! -x "$SPK" ]; then
-                swift build --product spk 2>/dev/null
+
+            # Use global spk if available, otherwise download latest release
+            if command -v spk >/dev/null 2>&1; then
+                exec spk hooks run pre-push
+            else
+                SPK=".build/spk"
+                if [ ! -x "$SPK" ]; then
+                    echo "Downloading latest spk..."
+                    mkdir -p .build
+                    ARCH=$(uname -m)
+                    case "$ARCH" in
+                        arm64) SUFFIX="macos-arm64" ;;
+                        x86_64) SUFFIX="macos-x86_64" ;;
+                        *) SUFFIX="macos-universal" ;;
+                    esac
+                    LATEST_URL=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\\///' | tr -d '\\r\\n')
+                    curl -sL "https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_URL}/spk-${LATEST_URL#v}-${SUFFIX}.tar.gz" | tar -xzf - -C .build
+                    chmod +x "$SPK"
+                fi
+                exec "$SPK" hooks run pre-push
             fi
-            exec "$SPK" hooks run pre-push
             """
         try prePushContent.write(to: prePushPath, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
