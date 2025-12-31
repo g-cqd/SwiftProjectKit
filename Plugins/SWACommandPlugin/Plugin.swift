@@ -499,23 +499,18 @@ struct SWACommandPlugin: CommandPlugin {
                 throw CommandError.downloadFailed(tool: "swa", statusCode: 0)
             }
 
-            let semaphore = DispatchSemaphore(value: 0)
-            var downloadError: Error?
-            var localFileURL: URL?
-
-            let task = URLSession.shared.downloadTask(with: downloadURL) { url, _, error in
-                localFileURL = url
-                downloadError = error
-                semaphore.signal()
-            }
-            task.resume()
-            semaphore.wait()
-
-            if let error = downloadError { throw error }
-            guard let localURL = localFileURL else {
+            // Synchronous download using Data(contentsOf:) - thread-safe for Swift 6 concurrency
+            let data: Data
+            do {
+                data = try Data(contentsOf: downloadURL)
+            } catch {
                 throw CommandError.downloadFailed(tool: "swa", statusCode: 0)
             }
 
+            // Write to temporary file
+            let tempDir = FileManager.default.temporaryDirectory
+            let localURL = tempDir.appendingPathComponent("swa-\(version).tar.gz")
+            try data.write(to: localURL)
             defer { try? FileManager.default.removeItem(at: localURL) }
 
             try FileManager.default.createDirectory(at: binaryDir, withIntermediateDirectories: true)
@@ -539,28 +534,20 @@ struct SWACommandPlugin: CommandPlugin {
                 return nil
             }
 
-            var request = URLRequest(url: url)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-            let semaphore = DispatchSemaphore(value: 0)
-            var result: String?
-
-            let task = URLSession.shared.dataTask(with: request) { data, response, _ in
-                defer { semaphore.signal() }
-                guard let data,
-                    let httpResponse = response as? HTTPURLResponse,
-                    httpResponse.statusCode == 200,
-                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                    let tagName = json["tag_name"] as? String
-                else {
-                    return
-                }
-                result = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+            // Synchronous fetch using Data(contentsOf:) - thread-safe for Swift 6 concurrency
+            guard let data = try? Data(contentsOf: url) else {
+                return nil
             }
-            task.resume()
-            semaphore.wait()
 
-            return result
+            // Parse JSON to extract tag_name
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let tagName = json["tag_name"] as? String
+            else {
+                return nil
+            }
+
+            // Remove 'v' prefix if present (e.g., "v0.0.16" -> "0.0.16")
+            return tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
         }
     }
 #endif

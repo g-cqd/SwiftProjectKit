@@ -272,14 +272,6 @@ struct SwiftFormatCommandPlugin: CommandPlugin {
             let action = isLintMode ? "checked" : "formatted"
             print("swift-format \(action) successfully")
         }
-
-        private func findConfigFile(in directory: URL) -> URL? {
-            let path = directory.appendingPathComponent(".swift-format")
-            if FileManager.default.fileExists(atPath: path.path) {
-                return path
-            }
-            return nil
-        }
     }
 #endif
 

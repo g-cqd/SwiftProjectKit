@@ -161,14 +161,6 @@ struct SwiftFormatBuildPlugin: BuildToolPlugin {
                 )
             ]
         }
-
-        private func findConfigFile(in directory: URL) -> URL? {
-            let path = directory.appendingPathComponent(".swift-format")
-            if FileManager.default.fileExists(atPath: path.path) {
-                return path
-            }
-            return nil
-        }
     }
 #endif
 
