@@ -40,8 +40,48 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
+      - name: Cache SPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Setup SPK
+        id: setup-spk
+        run: |
+          # Try to get version from .spk.json
+          if command -v jq &> /dev/null && [[ -f ".spk.json" ]]; then
+            SPK_VERSION=$(jq -r '.project.version // empty' .spk.json 2>/dev/null || echo "")
+          fi
+
+          SPK_BINARY=".build/debug/spk"
+          SPK_AVAILABLE=false
+
+          # Try to download pre-built binary if version is available
+          if [[ -n "$SPK_VERSION" ]]; then
+            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/v${SPK_VERSION}/spk-${SPK_VERSION}-macos-universal.tar.gz"
+            echo "Attempting to download spk v${SPK_VERSION}..."
+            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
+              mkdir -p .build/debug
+              tar -xzf /tmp/spk.tar.gz -C .build/debug
+              chmod +x "$SPK_BINARY"
+              SPK_AVAILABLE=true
+              echo "Downloaded spk v${SPK_VERSION}"
+            fi
+          fi
+
+          # Fall back to building from source
+          if [[ "$SPK_AVAILABLE" != "true" ]]; then
+            echo "Building spk from source..."
+            swift build --product spk
+            echo "Built spk from source"
+          fi
+
+          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
+
       - name: Check Formatting
-        run: xcrun swift-format lint --strict --recursive .
+        run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
 
   # ============================================================================
   # Stage 2: Build & Test (Always runs, depends on format check)
@@ -59,17 +99,45 @@ jobs:
       - name: Cache SPM Dependencies
         uses: actions/cache@v4
         with:
-          path: |
-            .build
-            ~/Library/Developer/Xcode/DerivedData
+          path: .build
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
-      - name: Build
-        run: swift build -c release
+      - name: Setup SPK
+        id: setup-spk
+        run: |
+          # Try to get version from .spk.json
+          if command -v jq &> /dev/null && [[ -f ".spk.json" ]]; then
+            SPK_VERSION=$(jq -r '.project.version // empty' .spk.json 2>/dev/null || echo "")
+          fi
 
-      - name: Run Tests
-        run: swift test --parallel
+          SPK_BINARY=".build/debug/spk"
+          SPK_AVAILABLE=false
+
+          # Try to download pre-built binary if version is available
+          if [[ -n "$SPK_VERSION" ]]; then
+            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/v${SPK_VERSION}/spk-${SPK_VERSION}-macos-universal.tar.gz"
+            echo "Attempting to download spk v${SPK_VERSION}..."
+            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
+              mkdir -p .build/debug
+              tar -xzf /tmp/spk.tar.gz -C .build/debug
+              chmod +x "$SPK_BINARY"
+              SPK_AVAILABLE=true
+              echo "Downloaded spk v${SPK_VERSION}"
+            fi
+          fi
+
+          # Fall back to building from source
+          if [[ "$SPK_AVAILABLE" != "true" ]]; then
+            echo "Building spk from source..."
+            swift build --product spk
+            echo "Built spk from source"
+          fi
+
+          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
+
+      - name: Run CI Hooks
+        run: ${{ steps.setup-spk.outputs.spk_path }} hooks run ci --fix none
 
   # ============================================================================
   # Stage 3: Security Analysis (Always runs, depends on format check)
@@ -112,7 +180,7 @@ jobs:
   # ============================================================================
   prepare-release:
     name: Prepare Release
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release) || github.event_name == 'push'
     outputs:
@@ -125,18 +193,63 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Cache SPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Setup SPK
+        id: setup-spk
+        run: |
+          # Try to get version from .spk.json
+          if command -v jq &> /dev/null && [[ -f ".spk.json" ]]; then
+            SPK_VERSION=$(jq -r '.project.version // empty' .spk.json 2>/dev/null || echo "")
+          fi
+
+          SPK_BINARY=".build/debug/spk"
+          SPK_AVAILABLE=false
+
+          # Try to download pre-built binary if version is available
+          if [[ -n "$SPK_VERSION" ]]; then
+            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/v${SPK_VERSION}/spk-${SPK_VERSION}-macos-universal.tar.gz"
+            echo "Attempting to download spk v${SPK_VERSION}..."
+            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
+              mkdir -p .build/debug
+              tar -xzf /tmp/spk.tar.gz -C .build/debug
+              chmod +x "$SPK_BINARY"
+              SPK_AVAILABLE=true
+              echo "Downloaded spk v${SPK_VERSION}"
+            fi
+          fi
+
+          # Fall back to building from source
+          if [[ "$SPK_AVAILABLE" != "true" ]]; then
+            echo "Building spk from source..."
+            swift build --product spk
+            echo "Built spk from source"
+          fi
+
+          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
+
       - name: Determine Version
         id: version
         run: |
-          # Read version from VERSION file (single source of truth)
-          if [[ -f "VERSION" ]]; then
-            VERSION=$(cat VERSION | tr -d '[:space:]')
+          # Try spk version first, fall back to .spk.json parsing
+          if VERSION=$(${{ steps.setup-spk.outputs.spk_path }} version --quiet 2>/dev/null); then
+            echo "Got version from spk: ${VERSION}"
+          elif [[ -f ".spk.json" ]] && command -v jq &> /dev/null; then
+            VERSION=$(jq -r '.project.version // empty' .spk.json)
           elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            echo "No VERSION file found and no version specified"
+            echo "No version source found"
             exit 1
           fi
 
