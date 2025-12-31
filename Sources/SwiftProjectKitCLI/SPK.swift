@@ -18,6 +18,7 @@ struct SPK: AsyncParsableCommand {
             FormatCommand.self,
             WorkflowCommand.self,
             HooksCommand.self,
+            VersionCommand.self,
         ],
         defaultSubcommand: nil
     )
