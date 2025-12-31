@@ -4,7 +4,7 @@
 @_exported import Foundation
 
 /// SwiftProjectKit version - keep in sync with VERSION file
-public let swiftProjectKitVersion = "0.0.21"
+public let swiftProjectKitVersion = "0.0.22"
 
 /// Default Swift version for new projects
 public let defaultSwiftVersion = "6.2"
