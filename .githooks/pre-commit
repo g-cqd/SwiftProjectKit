@@ -1,0 +1,8 @@
+#!/bin/sh
+# SwiftProjectKit pre-commit hook
+# Build if needed, then run hooks
+SPK=".build/debug/spk"
+if [ ! -x "$SPK" ] || [ "Package.swift" -nt "$SPK" ]; then
+    swift build --product spk 2>/dev/null
+fi
+exec "$SPK" hooks run pre-commit

@@ -49,7 +49,7 @@ struct ManagedToolTests {
     func swaRepository() {
         let tool = ManagedTool.swa
 
-        #expect(tool.repository == "nicklockwood/SwiftStaticAnalysis")
+        #expect(tool.repository == "g-cqd/SwiftStaticAnalysis")
     }
 
     // MARK: - Binary Names
@@ -110,25 +110,26 @@ struct ManagedToolTests {
     func swaDefaultVersion() {
         let version = ManagedTool.swa.defaultVersion
 
-        #expect(version == "0.1.0", "SWA should be pinned to 0.1.0")
+        #expect(version == "0.0.16", "SWA should be pinned to 0.0.16")
     }
 
     // MARK: - Asset Names
 
-    @Test("SWA asset name is swa.zip")
+    @Test("SWA asset name includes version")
     func swaAssetName() {
         let assetName = ManagedTool.swa.assetName(for: "1.0.0")
 
-        #expect(assetName == "swa.zip")
+        #expect(assetName == "swa-1.0.0-macos-universal.tar.gz")
     }
 
-    @Test("Asset names are consistent across versions")
-    func assetNamesConsistentAcrossVersions() {
+    @Test("Asset names include version for each release")
+    func assetNamesIncludeVersion() {
         for tool in ManagedTool.allCases {
             let v1 = tool.assetName(for: "1.0.0")
             let v2 = tool.assetName(for: "2.0.0")
 
-            #expect(v1 == v2, "Asset name for \(tool) should be version-independent")
+            #expect(v1.contains("1.0.0"), "Asset name should include version 1.0.0")
+            #expect(v2.contains("2.0.0"), "Asset name should include version 2.0.0")
         }
     }
 
@@ -137,12 +138,12 @@ struct ManagedToolTests {
     @Test("SWA download URL is correctly constructed")
     func swaDownloadURL() {
         let tool = ManagedTool.swa
-        let url = tool.downloadURL(for: "0.1.0")
+        let url = tool.downloadURL(for: "0.0.16")
 
         #expect(url.absoluteString.contains("github.com"))
-        #expect(url.absoluteString.contains("nicklockwood/SwiftStaticAnalysis"))
-        #expect(url.absoluteString.contains("0.1.0"))
-        #expect(url.absoluteString.contains("swa.zip"))
+        #expect(url.absoluteString.contains("g-cqd/SwiftStaticAnalysis"))
+        #expect(url.absoluteString.contains("v0.0.16"))
+        #expect(url.absoluteString.contains("swa-0.0.16-macos-universal.tar.gz"))
     }
 
     @Test("Download URLs are HTTPS")

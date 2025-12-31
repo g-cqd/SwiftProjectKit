@@ -83,7 +83,7 @@ public protocol ArchiveExtractor: Sendable {
 
 // MARK: - DefaultArchiveExtractor
 
-/// Default implementation using /usr/bin/unzip
+/// Default implementation using /usr/bin/unzip for .zip and /usr/bin/tar for .tar.gz
 public actor DefaultArchiveExtractor: ArchiveExtractor {
     // MARK: Lifecycle
 
@@ -92,12 +92,20 @@ public actor DefaultArchiveExtractor: ArchiveExtractor {
     // MARK: Public
 
     public func extract(zipAt source: URL, to destination: URL) async throws {
+        let sourcePath = source.path
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = ["-o", "-q", source.path, "-d", destination.path]
-
         let pipe = Pipe()
         process.standardError = pipe
+
+        // Detect archive type by extension
+        if sourcePath.hasSuffix(".tar.gz") || sourcePath.hasSuffix(".tgz") {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+            process.arguments = ["xzf", sourcePath, "-C", destination.path]
+        } else {
+            // Default to zip
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+            process.arguments = ["-o", "-q", sourcePath, "-d", destination.path]
+        }
 
         try process.run()
         process.waitUntilExit()

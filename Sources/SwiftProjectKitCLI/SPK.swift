@@ -11,11 +11,14 @@ struct SPK: AsyncParsableCommand {
         version: swiftProjectKitVersion,
         subcommands: [
             InitCommand.self,
+            BuildCommand.self,
+            AnalyzeCommand.self,
             SyncCommand.self,
             UpdateCommand.self,
             FormatCommand.self,
             WorkflowCommand.self,
+            HooksCommand.self,
         ],
-        defaultSubcommand: nil,
+        defaultSubcommand: nil
     )
 }

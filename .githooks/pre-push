@@ -1,0 +1,7 @@
+#!/bin/sh
+# SwiftProjectKit pre-push hook
+SPK=".build/debug/spk"
+if [ ! -x "$SPK" ]; then
+    swift build --product spk 2>/dev/null
+fi
+exec "$SPK" hooks run pre-push
