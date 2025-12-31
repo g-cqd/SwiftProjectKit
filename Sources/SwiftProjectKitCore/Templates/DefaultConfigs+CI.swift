@@ -132,32 +132,31 @@ extension DefaultConfigs {
 // MARK: - CI Jobs
 
 extension DefaultConfigs {
-    /// Reusable step to setup spk binary (download or build)
+    /// Reusable step to setup spk binary (download latest release or build from source)
     static func setupSpkStep(binaryName: String = "spk") -> String {
         """
               - name: Setup SPK
                 id: setup-spk
                 run: |
-                  # Try to get version from .spk.json
-                  if command -v jq &> /dev/null && [[ -f ".spk.json" ]]; then
-                    SPK_VERSION=$(jq -r '.project.version // empty' .spk.json 2>/dev/null || echo "")
-                  fi
-
                   SPK_BINARY=".build/debug/\(binaryName)"
                   SPK_AVAILABLE=false
 
-                  # Try to download pre-built binary if version is available
-                  if [[ -n "$SPK_VERSION" ]]; then
-                    DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/v${SPK_VERSION}/\(
+                  # Get latest release tag from GitHub
+                  echo "Fetching latest spk release..."
+                  LATEST_TAG=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\\///' | tr -d '\\r\\n')
+
+                  if [[ -n "$LATEST_TAG" ]]; then
+                    SPK_VERSION="${LATEST_TAG#v}"
+                    DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_TAG}/\(
             binaryName
         )-${SPK_VERSION}-macos-universal.tar.gz"
-                    echo "Attempting to download spk v${SPK_VERSION}..."
+                    echo "Attempting to download spk ${LATEST_TAG}..."
                     if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
                       mkdir -p .build/debug
                       tar -xzf /tmp/spk.tar.gz -C .build/debug
                       chmod +x "$SPK_BINARY"
                       SPK_AVAILABLE=true
-                      echo "Downloaded spk v${SPK_VERSION}"
+                      echo "Downloaded spk ${LATEST_TAG}"
                     fi
                   fi
 
