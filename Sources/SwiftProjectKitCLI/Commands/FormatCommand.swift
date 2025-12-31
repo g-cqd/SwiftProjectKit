@@ -14,7 +14,7 @@ struct FormatCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Check only - don't modify files")
     var lint = false
 
-    @Flag(name: .long, help: "Process files recursively")
+    @Flag(name: .long, inversion: .prefixedNo, help: "Process files recursively")
     var recursive = true
 
     func run() async throws {
