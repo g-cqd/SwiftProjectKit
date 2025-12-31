@@ -226,6 +226,7 @@ public enum Shell {
     }
 
     /// Run a command and return exit code (don't throw on non-zero)
+    /// Uses polling to handle commands that spawn child processes which inherit pipes.
     public static func runWithExitCode(
         _ command: String,
         arguments: [String] = [],
@@ -244,10 +245,41 @@ public enum Shell {
         }
 
         try process.run()
-        process.waitUntilExit()
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
+        // Use polling approach to handle child processes that inherit file descriptors
+        let handle = pipe.fileHandleForReading
+        var outputData = Data()
+        var processExited = false
+        var idleIterations = 0
+        let maxIdleIterations = 30  // 3 seconds at 100ms intervals
+
+        Task.detached {
+            process.waitUntilExit()
+        }
+
+        while true {
+            if !process.isRunning {
+                processExited = true
+            }
+
+            let available = handle.availableData
+            if available.isEmpty {
+                if processExited {
+                    idleIterations += 1
+                    if idleIterations >= maxIdleIterations {
+                        break
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+
+            idleIterations = 0
+            outputData.append(available)
+        }
+
+        process.waitUntilExit()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
 
         return (output, process.terminationStatus)
     }
@@ -277,12 +309,26 @@ public enum Shell {
 
         try process.run()
 
-        // Stream output using async bytes
-        async let stdoutTask: () = streamPipe(stdoutPipe, type: .stdout, onOutput: onOutput)
-        async let stderrTask: () = streamPipe(stderrPipe, type: .stderr, onOutput: onOutput)
-
-        // Wait for both streams to complete
-        _ = await (stdoutTask, stderrTask)
+        // Stream output with process monitoring
+        // Close pipes when process exits to handle child processes that inherit file descriptors
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await streamPipeUntilProcessExits(
+                    stdoutPipe,
+                    type: .stdout,
+                    process: process,
+                    onOutput: onOutput
+                )
+            }
+            group.addTask {
+                await streamPipeUntilProcessExits(
+                    stderrPipe,
+                    type: .stderr,
+                    process: process,
+                    onOutput: onOutput
+                )
+            }
+        }
 
         process.waitUntilExit()
         return process.terminationStatus
@@ -313,60 +359,185 @@ public enum Shell {
 
         try process.run()
 
-        // Stream and collect output using async bytes
-        async let stdoutLines: [String] = streamAndCollectPipe(
-            stdoutPipe,
-            type: .stdout,
-            onOutput: onOutput
-        )
-        async let stderrLines: [String] = streamAndCollectPipe(
-            stderrPipe,
-            type: .stderr,
-            onOutput: onOutput
-        )
+        // Stream and collect output with process monitoring
+        // Close pipes when process exits to handle child processes that inherit file descriptors
+        let results = await withTaskGroup(of: (OutputType, [String]).self) { group -> ([String], [String]) in
+            group.addTask {
+                let lines = await streamAndCollectPipeUntilProcessExits(
+                    stdoutPipe,
+                    type: .stdout,
+                    process: process,
+                    onOutput: onOutput
+                )
+                return (.stdout, lines)
+            }
+            group.addTask {
+                let lines = await streamAndCollectPipeUntilProcessExits(
+                    stderrPipe,
+                    type: .stderr,
+                    process: process,
+                    onOutput: onOutput
+                )
+                return (.stderr, lines)
+            }
 
-        // Wait for both streams to complete
-        let (stdout, stderr) = await (stdoutLines, stderrLines)
+            var stdout: [String] = []
+            var stderr: [String] = []
+            for await (type, lines) in group {
+                switch type {
+                case .stdout: stdout = lines
+                case .stderr: stderr = lines
+                }
+            }
+            return (stdout, stderr)
+        }
 
         process.waitUntilExit()
 
-        let output = (stdout + stderr).joined(separator: "\n")
+        let output = (results.0 + results.1).joined(separator: "\n")
         return (output, process.terminationStatus)
     }
 
     // MARK: - Private Helpers
 
-    private static func streamPipe(
+    /// Streams pipe output until the process exits and output stops.
+    /// Uses polling approach to handle child processes that inherit file descriptors.
+    private static func streamPipeUntilProcessExits(
         _ pipe: Pipe,
         type: OutputType,
+        process: Process,
         onOutput: @escaping @Sendable (String, OutputType) -> Void
     ) async {
         let handle = pipe.fileHandleForReading
-        do {
-            for try await line in handle.bytes.lines {
-                onOutput(line, type)
+        var buffer = Data()
+        var processExited = false
+        var idleIterations = 0
+        let maxIdleIterations = 30  // 3 seconds at 100ms intervals
+
+        // Start monitoring process exit
+        Task.detached {
+            process.waitUntilExit()
+        }
+
+        while true {
+            // Check if process has exited
+            if !process.isRunning {
+                processExited = true
             }
-        } catch {
-            // Ignore errors when reading from pipe (process may have terminated)
+
+            // Read available data
+            let available = handle.availableData
+            if available.isEmpty {
+                if processExited {
+                    idleIterations += 1
+                    if idleIterations >= maxIdleIterations {
+                        break
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+
+            // Reset idle counter when we get data
+            idleIterations = 0
+            buffer.append(available)
+
+            // Process complete lines
+            while let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                let lineData = buffer[..<newlineIndex]
+                buffer = buffer[(buffer.index(after: newlineIndex))...]
+                if let line = String(data: Data(lineData), encoding: .utf8) {
+                    onOutput(line, type)
+                }
+            }
+        }
+
+        // Process any remaining data in buffer
+        if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8) {
+            onOutput(line, type)
         }
     }
 
-    private static func streamAndCollectPipe(
+    /// Streams and collects pipe output until the process exits and output stops.
+    private static func streamAndCollectPipeUntilProcessExits(
         _ pipe: Pipe,
         type: OutputType,
+        process: Process,
         onOutput: @escaping @Sendable (String, OutputType) -> Void
     ) async -> [String] {
-        var lines: [String] = []
         let handle = pipe.fileHandleForReading
-        do {
-            for try await line in handle.bytes.lines {
-                onOutput(line, type)
-                lines.append(line)
-            }
-        } catch {
-            // Ignore errors when reading from pipe (process may have terminated)
+        var buffer = Data()
+        var lines: [String] = []
+        var processExited = false
+        var idleIterations = 0
+        let maxIdleIterations = 30  // 3 seconds at 100ms intervals
+
+        Task.detached {
+            process.waitUntilExit()
         }
+
+        while true {
+            if !process.isRunning {
+                processExited = true
+            }
+
+            let available = handle.availableData
+            if available.isEmpty {
+                if processExited {
+                    idleIterations += 1
+                    if idleIterations >= maxIdleIterations {
+                        break
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+                continue
+            }
+
+            idleIterations = 0
+            buffer.append(available)
+
+            while let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                let lineData = buffer[..<newlineIndex]
+                buffer = buffer[(buffer.index(after: newlineIndex))...]
+                if let line = String(data: Data(lineData), encoding: .utf8) {
+                    onOutput(line, type)
+                    lines.append(line)
+                }
+            }
+        }
+
+        if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8) {
+            onOutput(line, type)
+            lines.append(line)
+        }
+
         return lines
+    }
+}
+
+// MARK: - LineCollector
+
+/// Actor to safely collect lines from concurrent tasks
+private actor LineCollector {
+    private(set) var lines: [String] = []
+
+    func append(_ line: String) {
+        lines.append(line)
+    }
+}
+
+// MARK: - ActivityTracker
+
+/// Actor to track recent activity for determining when output has stopped
+private actor ActivityTracker {
+    private var lastActivity: ContinuousClock.Instant = .now
+
+    func recordActivity() {
+        lastActivity = .now
+    }
+
+    func hasRecentActivity(within duration: Duration) -> Bool {
+        ContinuousClock.now - lastActivity < duration
     }
 }
 
