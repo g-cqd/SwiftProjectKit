@@ -35,8 +35,8 @@ struct HooksConfigurationTests {
         #expect(config.enabled == true)
         #expect(config.scope == .staged)
         #expect(config.parallel == true)
-        #expect(config.tasks.contains("format"))
-        #expect(config.tasks.contains("build"))
+        #expect(config.taskSpecs.contains { $0.id == "format" })
+        #expect(config.taskSpecs.contains { $0.id == "versionSync" })
     }
 
     @Test("Default pre-push configuration")
@@ -46,7 +46,7 @@ struct HooksConfigurationTests {
         #expect(config.enabled == true)
         #expect(config.scope == .changed)
         #expect(config.baseBranch == "main")
-        #expect(config.tasks.contains("test"))
+        #expect(config.taskSpecs.contains { $0.id == "test" })
     }
 
     @Test("Default CI configuration")
@@ -55,8 +55,8 @@ struct HooksConfigurationTests {
 
         #expect(config.enabled == true)
         #expect(config.scope == .all)
-        #expect(config.tasks.contains("build"))
-        #expect(config.tasks.contains("test"))
+        #expect(config.taskSpecs.contains { $0.id == "test" })
+        #expect(config.taskSpecs.contains { $0.id == "format" })
     }
 
     // MARK: - TaskConfig Tests
@@ -144,7 +144,10 @@ struct HooksConfigurationTests {
             scope: .changed,
             baseBranch: "develop",
             parallel: false,
-            tasks: ["format", "lint"]
+            taskSpecs: [
+                TaskSpec(id: "format", mode: .check),
+                TaskSpec(id: "lint", mode: .check),
+            ]
         )
 
         let encoder = JSONEncoder()
@@ -157,6 +160,49 @@ struct HooksConfigurationTests {
         #expect(decoded.scope == .changed)
         #expect(decoded.baseBranch == "develop")
         #expect(decoded.parallel == false)
-        #expect(decoded.tasks == ["format", "lint"])
+        #expect(decoded.taskSpecs.count == 2)
+        #expect(decoded.taskSpecs[0].id == "format")
+        #expect(decoded.taskSpecs[1].id == "lint")
+    }
+
+    // MARK: - TaskSpec Tests
+
+    @Test("TaskSpec with dependencies")
+    func taskSpecWithDependencies() {
+        let spec = TaskSpec(
+            id: "test",
+            mode: .check,
+            dependsOn: ["format", "build"]
+        )
+
+        #expect(spec.id == "test")
+        #expect(spec.mode == .check)
+        #expect(spec.dependsOn == ["format", "build"])
+    }
+
+    @Test("TaskSpec decodes from shorthand string")
+    func taskSpecShorthand() throws {
+        let json = #""format:check""#
+        let data = json.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let spec = try decoder.decode(TaskSpec.self, from: data)
+
+        #expect(spec.id == "format")
+        #expect(spec.mode == .check)
+        #expect(spec.dependsOn.isEmpty)
+    }
+
+    @Test("TaskSpec decodes from full object")
+    func taskSpecFullObject() throws {
+        let json = #"{"id": "test", "mode": "check", "dependsOn": ["format", "build"]}"#
+        let data = json.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let spec = try decoder.decode(TaskSpec.self, from: data)
+
+        #expect(spec.id == "test")
+        #expect(spec.mode == .check)
+        #expect(spec.dependsOn == ["format", "build"])
     }
 }

@@ -51,42 +51,50 @@ public actor HookRunner {
     // MARK: - Public API
 
     /// Run all tasks for a specific hook type
+    ///
+    /// When the hook configuration uses the new `stages` format, tasks are executed
+    /// in dependency order using the `StageRunner`. Otherwise, falls back to legacy
+    /// flat task execution.
     public func run(
         hook: HookType,
         fixMode: FixMode? = nil
     ) async throws -> HookRunResult {
-        let stageConfig = stageConfig(for: hook)
+        let hookStageConfig = stageConfig(for: hook)
 
-        guard stageConfig.enabled else {
+        guard hookStageConfig.enabled else {
             await output.info("Hook '\(hook.rawValue)' is disabled")
             return HookRunResult(success: true, results: [])
         }
 
         await output.header("Running \(hook.rawValue) hooks...")
 
-        // Resolve tasks to run
-        let taskIDs = stageConfig.tasks
-        let tasksToRun = taskIDs.compactMap { resolveTask(id: $0) }
+        // Build context
+        let context = try await buildContext(
+            hook: hook,
+            scope: hookStageConfig.scope,
+            fixMode: fixMode ?? config.fixMode
+        )
 
-        guard !tasksToRun.isEmpty else {
+        // Use stage-based execution if stages are configured
+        let stages = hookStageConfig.resolvedStages
+        guard !stages.isEmpty else {
             await output.warning("No tasks configured for \(hook.rawValue)")
             return HookRunResult(success: true, results: [])
         }
 
-        // Build context
-        let context = try await buildContext(
-            hook: hook,
-            scope: stageConfig.scope,
-            fixMode: fixMode ?? config.fixMode
+        // Create stage runner and execute
+        let stageRunner = StageRunner(
+            projectRoot: projectRoot,
+            config: config,
+            tasks: Array(registeredTasks.values),
+            output: output,
+            verbose: verbose
         )
 
-        // Execute tasks
-        let results: [TaskRunResult]
-        if stageConfig.parallel {
-            results = await runTasksInParallel(tasksToRun, context: context)
-        } else {
-            results = await runTasksSequentially(tasksToRun, context: context)
-        }
+        let stageResults = try await stageRunner.runStages(stages, context: context)
+
+        // Collect all task results from stages
+        let results = stageResults.flatMap(\.taskResults)
 
         // Restage fixed files if needed
         if config.restageFixed {
@@ -100,16 +108,8 @@ public actor HookRunner {
         // Report results
         await reportResults(results)
 
-        let success = results.allSatisfy { result in
-            switch result.taskResult.status {
-            case .passed, .skipped:
-                true
-            case .warning:
-                true
-            case .failed:
-                !result.isBlocking
-            }
-        }
+        // Success if all stages succeeded
+        let success = stageResults.allSatisfy(\.success)
 
         return HookRunResult(success: success, results: results)
     }

@@ -8,6 +8,25 @@ struct HooksCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "hooks",
         abstract: "Manage git hooks for your Swift project",
+        usage: """
+            spk hooks <subcommand>
+            spk hooks [<hook>]        (runs 'spk hooks run')
+            """,
+        discussion: """
+            Git hooks help maintain code quality by running checks before commits and pushes.
+
+            SUBCOMMANDS:
+              setup     Install git hooks in this repository
+              run       Run hook tasks (default)
+              fix       Apply automatic fixes
+              list      List available tasks
+
+            EXAMPLES:
+              spk hooks setup           Set up git hooks
+              spk hooks run pre-commit  Run pre-commit checks
+              spk hooks run pre-push    Run pre-push checks with tests
+              spk hooks fix             Apply safe fixes to code
+            """,
         subcommands: [
             SetupCommand.self,
             RunCommand.self,
@@ -405,12 +424,92 @@ struct RunCommand: AsyncParsableCommand {
             default: .staged
             }
 
+        // Parse tasks with dependencies
+        let tasksJson = json["tasks"] as? [Any] ?? []
+        let taskSpecs = tasksJson.compactMap { parseTaskSpec($0) }
+
         return HookStageConfig(
             enabled: json["enabled"] as? Bool ?? true,
             scope: scope,
             baseBranch: json["baseBranch"] as? String,
             parallel: json["parallel"] as? Bool ?? true,
-            tasks: json["tasks"] as? [String] ?? []
+            taskSpecs: taskSpecs
+        )
+    }
+
+    private func parseTaskSpec(_ json: Any) -> TaskSpec? {
+        if let taskStr = json as? String {
+            // Shorthand format: "format" or "format:check"
+            let parts = taskStr.split(separator: ":")
+            guard let idPart = parts.first else { return nil }
+            let id = String(idPart)
+            let mode: TaskMode
+            if parts.count > 1 {
+                mode = TaskMode(rawValue: String(parts[1])) ?? .fix
+            } else {
+                mode = .fix
+            }
+            return TaskSpec(id: id, mode: mode)
+        } else if let taskDict = json as? [String: Any],
+            let id = taskDict["id"] as? String
+        {
+            // Full object format with dependencies
+            let modeStr = taskDict["mode"] as? String ?? "fix"
+            let mode = TaskMode(rawValue: modeStr) ?? .fix
+            let dependsOn = taskDict["dependsOn"] as? [String] ?? []
+            let options = parseOptions(taskDict["options"] as? [String: Any])
+            let blocking = taskDict["blocking"] as? Bool
+            let continueOnError = taskDict["continueOnError"] as? Bool ?? false
+
+            return TaskSpec(
+                id: id,
+                mode: mode,
+                dependsOn: dependsOn,
+                options: options,
+                blocking: blocking,
+                continueOnError: continueOnError
+            )
+        }
+        return nil
+    }
+
+    // Legacy support - kept for backwards compatibility
+    private func parseHookStage(_ json: [String: Any]) -> HookStage? {
+        guard let name = json["name"] as? String else { return nil }
+
+        // Parse tasks - can be strings or objects
+        let tasksJson = json["tasks"] as? [Any] ?? []
+        let tasks: [StageTask] = tasksJson.compactMap { taskJson -> StageTask? in
+            if let taskStr = taskJson as? String {
+                let parts = taskStr.split(separator: ":")
+                guard let idPart = parts.first else { return nil }
+                let id = String(idPart)
+                let mode: TaskMode
+                if parts.count > 1 {
+                    mode = TaskMode(rawValue: String(parts[1])) ?? .fix
+                } else {
+                    mode = .fix
+                }
+                return StageTask(id: id, mode: mode)
+            } else if let taskDict = taskJson as? [String: Any],
+                let id = taskDict["id"] as? String
+            {
+                let modeStr = taskDict["mode"] as? String ?? "fix"
+                let mode = TaskMode(rawValue: modeStr) ?? .fix
+                let options = parseOptions(taskDict["options"] as? [String: Any])
+                return StageTask(id: id, mode: mode, options: options)
+            }
+            return nil
+        }
+
+        guard !tasks.isEmpty else { return nil }
+
+        return HookStage(
+            name: name,
+            tasks: tasks,
+            parallel: json["parallel"] as? Bool ?? true,
+            dependencies: json["dependencies"] as? [String] ?? [],
+            continueOnError: json["continueOnError"] as? Bool ?? false
         )
     }
 

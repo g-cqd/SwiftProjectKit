@@ -2,7 +2,7 @@
   "version": "1.0",
   "swiftVersion": "6.2",
   "project": {
-    "version": "0.0.25"
+    "version": "0.0.26"
   },
   "platforms": {
     "macOS": "15.0"
@@ -14,21 +14,36 @@
     "preCommit": {
       "enabled": true,
       "scope": "staged",
-      "parallel": false,
-      "tasks": ["format", "versionSync", "build", "test"]
+      "parallel": true,
+      "tasks": [
+        "versionSync:fix",
+        "format:fix",
+        {"id": "unused", "mode": "check", "dependsOn": ["versionSync", "format"], "continueOnError": true},
+        {"id": "duplicates", "mode": "check", "dependsOn": ["versionSync", "format"], "continueOnError": true}
+      ]
     },
     "prePush": {
       "enabled": true,
       "scope": "changed",
       "baseBranch": "main",
       "parallel": true,
-      "tasks": ["test", "unused", "duplicates"]
+      "tasks": [
+        "versionSync:check",
+        "format:check",
+        {"id": "test", "mode": "check", "dependsOn": ["versionSync", "format"]}
+      ]
     },
     "ci": {
       "enabled": true,
       "scope": "all",
       "parallel": true,
-      "tasks": ["format:check", "versionSync:check", "build", "test", "unused", "duplicates", "checkDocs"]
+      "tasks": [
+        "versionSync:check",
+        "format:check",
+        {"id": "unused", "mode": "check", "dependsOn": ["format"], "continueOnError": true},
+        {"id": "duplicates", "mode": "check", "dependsOn": ["format"], "continueOnError": true},
+        {"id": "test", "mode": "check", "dependsOn": ["versionSync", "format"], "options": {"coverage": true, "parallel": true}}
+      ]
     },
     "tasks": {
       "format": {
@@ -79,12 +94,6 @@
         "options": {
           "minTokens": 100
         }
-      },
-      "checkDocs": {
-        "name": "Check Docs",
-        "command": "ls README.md",
-        "blocking": false,
-        "hooks": ["ci"]
       }
     }
   },

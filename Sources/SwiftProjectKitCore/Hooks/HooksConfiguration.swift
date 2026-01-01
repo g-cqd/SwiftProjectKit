@@ -60,47 +60,139 @@ public struct HooksConfiguration: Codable, Sendable, Equatable {
 // MARK: - HookStageConfig
 
 /// Configuration for a specific hook stage (pre-commit, pre-push, ci)
+///
+/// Supports task specifications with dependencies. Tasks are automatically
+/// grouped into execution waves based on their dependency constraints.
+///
+/// When `parallel` is true, tasks with satisfied dependencies run concurrently.
+/// When `parallel` is false, tasks run sequentially in definition order.
 public struct HookStageConfig: Codable, Sendable, Equatable {
+    /// Whether this hook is enabled
     public var enabled: Bool
+
+    /// File scope for this hook
     public var scope: HookScope
+
+    /// Base branch for comparison (used in pre-push)
     public var baseBranch: String?
+
+    /// Whether tasks run in parallel (when dependencies allow)
     public var parallel: Bool
-    public var tasks: [String]
+
+    /// Task specifications with dependencies
+    ///
+    /// Supports:
+    /// - Shorthand: `"format"` or `"format:check"`
+    /// - Full object: `{"id": "test", "mode": "check", "dependsOn": ["format"]}`
+    public var taskSpecs: [TaskSpec]
 
     public init(
         enabled: Bool = true,
         scope: HookScope = .all,
         baseBranch: String? = nil,
         parallel: Bool = true,
-        tasks: [String] = []
+        taskSpecs: [TaskSpec] = []
     ) {
         self.enabled = enabled
         self.scope = scope
         self.baseBranch = baseBranch
         self.parallel = parallel
-        self.tasks = tasks
+        self.taskSpecs = taskSpecs
     }
 
+    /// Resolve configuration to stages format using dependency resolution
+    ///
+    /// Tasks are grouped into execution waves based on their dependencies.
+    public var resolvedStages: [HookStage] {
+        guard !taskSpecs.isEmpty else { return [] }
+
+        do {
+            let resolution = try TaskDependencyResolver.resolve(
+                tasks: taskSpecs,
+                parallel: parallel
+            )
+            return TaskDependencyResolver.toStages(resolution)
+        } catch {
+            // If resolution fails, fall back to sequential execution
+            let stageTasks = taskSpecs.map { spec in
+                StageTask(id: spec.id, mode: spec.mode, options: spec.options)
+            }
+            return [
+                HookStage(
+                    name: "default",
+                    tasks: stageTasks,
+                    parallel: false,
+                    dependencies: [],
+                    continueOnError: false
+                )
+            ]
+        }
+    }
+
+    // MARK: - Codable
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        scope = try container.decodeIfPresent(HookScope.self, forKey: .scope) ?? .staged
+        baseBranch = try container.decodeIfPresent(String.self, forKey: .baseBranch)
+        parallel = try container.decodeIfPresent(Bool.self, forKey: .parallel) ?? true
+        taskSpecs = try container.decodeIfPresent([TaskSpec].self, forKey: .tasks) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(scope, forKey: .scope)
+        try container.encodeIfPresent(baseBranch, forKey: .baseBranch)
+        try container.encode(parallel, forKey: .parallel)
+        try container.encode(taskSpecs, forKey: .tasks)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, scope, baseBranch, parallel, tasks
+    }
+
+    // MARK: - Default Configurations
+
+    /// Default pre-commit: format and versionSync with autofix, then analysis
     public static let defaultPreCommit = Self(
         enabled: true,
         scope: .staged,
         parallel: true,
-        tasks: ["format", "versionSync", "build"]
+        taskSpecs: [
+            TaskSpec(id: "versionSync", mode: .fix),
+            TaskSpec(id: "format", mode: .fix),
+            TaskSpec(id: "unused", mode: .check, dependsOn: ["versionSync", "format"], continueOnError: true),
+            TaskSpec(id: "duplicates", mode: .check, dependsOn: ["versionSync", "format"], continueOnError: true),
+        ]
     )
 
+    /// Default pre-push: verify then test
     public static let defaultPrePush = Self(
         enabled: true,
         scope: .changed,
         baseBranch: "main",
         parallel: true,
-        tasks: ["test"]
+        taskSpecs: [
+            TaskSpec(id: "versionSync", mode: .check),
+            TaskSpec(id: "format", mode: .check),
+            TaskSpec(id: "test", mode: .check, dependsOn: ["versionSync", "format"]),
+        ]
     )
 
+    /// Default CI: quality checks then test
     public static let defaultCI = Self(
         enabled: true,
         scope: .all,
         parallel: true,
-        tasks: ["format:check", "versionSync:check", "build", "test"]
+        taskSpecs: [
+            TaskSpec(id: "versionSync", mode: .check),
+            TaskSpec(id: "format", mode: .check),
+            TaskSpec(id: "unused", mode: .check, dependsOn: ["format"], continueOnError: true),
+            TaskSpec(id: "duplicates", mode: .check, dependsOn: ["format"], continueOnError: true),
+            TaskSpec(id: "test", mode: .check, dependsOn: ["versionSync", "format"]),
+        ]
     )
 }
 

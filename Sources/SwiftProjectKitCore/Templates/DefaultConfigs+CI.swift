@@ -5,6 +5,12 @@ import Foundation
 // MARK: - Unified CI/CD Workflow
 
 extension DefaultConfigs {
+    /// Default SWA version for CI workflows
+    public static let defaultSWAVersion = "1.0.6"
+
+    /// Default Xcode version for CI workflows
+    public static let defaultXcodeVersion = "26.1.1"
+
     /// Generates a unified CI/CD workflow with conditional release jobs.
     /// - Parameters:
     ///   - name: The project name (used in release notes)
@@ -16,6 +22,8 @@ extension DefaultConfigs {
     ///   - includeHomebrew: Whether to generate Homebrew formula (default: false, requires includeBinaryRelease)
     ///   - homebrewTap: The Homebrew tap name (e.g., "g-cqd/tap")
     ///   - useSpk: Whether to use spk for CI tasks (format, build, test via hooks)
+    ///   - includeStaticAnalysis: Whether to include unused/duplicates checks (default: false)
+    ///   - swaVersion: SwiftStaticAnalysis version for static analysis (default: 1.0.6)
     /// - Returns: The complete workflow YAML string
     public static func ciWorkflow(
         name: String,
@@ -26,21 +34,50 @@ extension DefaultConfigs {
         binaryName: String? = nil,
         includeHomebrew: Bool = false,
         homebrewTap: String? = nil,
-        useSpk: Bool = false
+        useSpk: Bool = false,
+        includeStaticAnalysis: Bool = false,
+        swaVersion: String = defaultSWAVersion
     ) -> String {
         let resolvedBinaryName = binaryName ?? name.lowercased()
 
-        var workflow = ciWorkflowHeader(includeRelease: includeRelease)
+        var workflow = ciWorkflowHeader(
+            includeRelease: includeRelease,
+            includeStaticAnalysis: includeStaticAnalysis,
+            swaVersion: swaVersion
+        )
 
-        if useSpk {
-            workflow += ciSpkLintJob()
-            workflow += ciSpkBuildAndTestJob()
-        } else {
-            workflow += ciLintJob()
-            workflow += ciBuildAndTestJob()
+        // Stage 1: Setup (if static analysis is enabled)
+        if includeStaticAnalysis {
+            workflow += ciSetupJob(swaVersion: swaVersion)
         }
 
-        workflow += ciCodeQLJob()
+        // Stage 2: Quality checks (parallel)
+        if useSpk {
+            workflow += ciSpkLintJob(needsSetup: includeStaticAnalysis)
+        } else {
+            workflow += ciLintJob(needsSetup: includeStaticAnalysis)
+        }
+
+        if includeStaticAnalysis {
+            workflow += ciUnusedCheckJob()
+            workflow += ciDuplicatesCheckJob()
+        }
+
+        // Stage 3: Tests (after quality checks)
+        if useSpk {
+            workflow += ciSpkBuildAndTestJob(
+                needsQualityChecks: true,
+                includeStaticAnalysis: includeStaticAnalysis
+            )
+        } else {
+            workflow += ciBuildAndTestJob(
+                needsQualityChecks: true,
+                includeStaticAnalysis: includeStaticAnalysis
+            )
+        }
+
+        // Stage 4: CodeQL (after tests)
+        workflow += ciCodeQLJob(needsTest: true)
 
         // Only include platform matrix if explicitly requested AND multiple platforms configured
         if includePlatformMatrix, platforms.enabledPlatforms.count > 1 {
@@ -69,7 +106,11 @@ extension DefaultConfigs {
 
 extension DefaultConfigs {
     // swa:ignore-complexity
-    static func ciWorkflowHeader(includeRelease: Bool) -> String {
+    static func ciWorkflowHeader(
+        includeRelease: Bool,
+        includeStaticAnalysis: Bool = false,
+        swaVersion: String = defaultSWAVersion
+    ) -> String {
         let triggers =
             includeRelease
             ? """
@@ -110,6 +151,18 @@ extension DefaultConfigs {
               security-events: write
             """
 
+        let envVars =
+            includeStaticAnalysis
+            ? """
+            env:
+              XCODE_VERSION: '\(defaultXcodeVersion)'
+              SWA_VERSION: '\(swaVersion)'
+            """
+            : """
+            env:
+              XCODE_VERSION: '\(defaultXcodeVersion)'
+            """
+
         return """
             name: CI/CD
 
@@ -121,11 +174,131 @@ extension DefaultConfigs {
               group: ${{ github.workflow }}-${{ github.ref }}
               cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-            env:
-              XCODE_VERSION: '\(defaultXcodeVersion)'
+            \(envVars)
 
             jobs:
             """
+    }
+}
+
+// MARK: - Setup Job
+
+extension DefaultConfigs {
+    /// Job that caches SWA binary for static analysis
+    static func ciSetupJob(swaVersion: String = defaultSWAVersion) -> String {
+        """
+
+          # ==========================================================================
+          # Stage 1: Setup - Cache SWA binary
+          # ==========================================================================
+          setup:
+            name: Setup Tools
+            runs-on: macos-15
+            outputs:
+              swa_path: ${{ steps.swa.outputs.path }}
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Cache SWA Binary
+                id: swa-cache
+                uses: actions/cache@v4
+                with:
+                  path: ~/.local/bin/swa
+                  key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+              - name: Download SWA
+                if: steps.swa-cache.outputs.cache-hit != 'true'
+                run: |
+                  mkdir -p ~/.local/bin
+                  DOWNLOAD_URL="https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v${{ env.SWA_VERSION }}/swa-${{ env.SWA_VERSION }}-macos-universal.tar.gz"
+                  echo "Downloading SWA from ${DOWNLOAD_URL}..."
+                  if curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz 2>/dev/null; then
+                    tar -xzf /tmp/swa.tar.gz -C ~/.local/bin
+                    chmod +x ~/.local/bin/swa
+                    echo "Downloaded SWA ${{ env.SWA_VERSION }}"
+                  else
+                    echo "Failed to download SWA"
+                  fi
+
+              - name: Verify SWA
+                id: swa
+                run: |
+                  if [[ -x ~/.local/bin/swa ]]; then
+                    echo "path=$HOME/.local/bin/swa" >> $GITHUB_OUTPUT
+                    ~/.local/bin/swa --version || true
+                  else
+                    echo "path=" >> $GITHUB_OUTPUT
+                    echo "SWA not available"
+                  fi
+
+        """
+    }
+
+    /// Job that checks for unused code
+    static func ciUnusedCheckJob() -> String {
+        """
+          unused-check:
+            name: Unused Code Check
+            runs-on: macos-15
+            needs: setup
+            if: needs.setup.outputs.swa_path != ''
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Restore SWA Binary
+                uses: actions/cache@v4
+                with:
+                  path: ~/.local/bin/swa
+                  key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+              - name: Check Unused Code
+                run: |
+                  ~/.local/bin/swa unused \\
+                    --mode reachability \\
+                    --paths Sources/ \\
+                    --exclude-paths .build/ \\
+                    --format xcode
+                continue-on-error: true
+
+        """
+    }
+
+    /// Job that checks for code duplication
+    static func ciDuplicatesCheckJob() -> String {
+        """
+          duplicates-check:
+            name: Duplicates Check
+            runs-on: macos-15
+            needs: setup
+            if: needs.setup.outputs.swa_path != ''
+            steps:
+              - uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Restore SWA Binary
+                uses: actions/cache@v4
+                with:
+                  path: ~/.local/bin/swa
+                  key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+              - name: Check Duplicates
+                run: |
+                  ~/.local/bin/swa duplicates \\
+                    --min-tokens 100 \\
+                    --paths Sources/ \\
+                    --exclude-paths .build/ \\
+                    --format xcode
+                continue-on-error: true
+
+        """
     }
 }
 
@@ -171,163 +344,238 @@ extension DefaultConfigs {
         """
     }
 
-    static func ciLintJob() -> String {
-        """
+    static func ciLintJob(needsSetup: Bool = false) -> String {
+        let needs = needsSetup ? "\n    needs: setup" : ""
+        let stageLabel = needsSetup ? "Stage 2" : "Stage 1"
 
-          # ==========================================================================
-          # Stage 1: Code Quality (Always runs)
-          # ==========================================================================
-          format-check:
-            name: Format Check
-            runs-on: macos-15
-            steps:
-              - uses: actions/checkout@v4
+        return """
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+              # ==========================================================================
+              # \(stageLabel): Code Quality (Always runs)
+              # ==========================================================================
+              format-check:
+                name: Format Check
+                runs-on: macos-15\(needs)
+                steps:
+                  - uses: actions/checkout@v4
 
-              - name: Check Formatting
-                run: xcrun swift-format lint --strict --recursive .
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-        """
+                  - name: Check Formatting
+                    run: xcrun swift-format lint --strict --parallel --recursive .
+
+            """
     }
 
     /// SPK-based lint job using spk format
-    static func ciSpkLintJob() -> String {
-        """
+    static func ciSpkLintJob(needsSetup: Bool = false) -> String {
+        let needs = needsSetup ? "\n    needs: setup" : ""
+        let stageLabel = needsSetup ? "Stage 2" : "Stage 1"
 
-          # ==========================================================================
-          # Stage 1: Code Quality (Always runs)
-          # ==========================================================================
-          format-check:
-            name: Format Check
-            runs-on: macos-15
-            steps:
-              - uses: actions/checkout@v4
+        return """
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+              # ==========================================================================
+              # \(stageLabel): Code Quality (Always runs)
+              # ==========================================================================
+              format-check:
+                name: Format Check
+                runs-on: macos-15\(needs)
+                steps:
+                  - uses: actions/checkout@v4
 
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: .build
-                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-        \(setupSpkStep())
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: .build
+                      key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-
 
-              - name: Check Formatting
-                run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
+            \(setupSpkStep())
 
-        """
+                  - name: Check Formatting
+                    run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
+
+            """
     }
 
-    static func ciBuildAndTestJob() -> String {
-        """
-          # ==========================================================================
-          # Stage 2: Build & Test (Always runs, depends on format check)
-          # ==========================================================================
-          build-and-test:
-            name: Build & Test
-            runs-on: macos-15
-            needs: format-check
-            steps:
-              - uses: actions/checkout@v4
+    static func ciBuildAndTestJob(
+        needsQualityChecks: Bool = true,
+        includeStaticAnalysis: Bool = false
+    ) -> String {
+        let needs: String
+        if includeStaticAnalysis {
+            needs = "[format-check, unused-check, duplicates-check]"
+        } else {
+            needs = needsQualityChecks ? "format-check" : ""
+        }
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+        let needsClause = needs.isEmpty ? "" : "\n    needs: \(needs)"
 
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: |
-                    .build
-                    ~/Library/Developer/Xcode/DerivedData
-                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-
+        let ifClause =
+            includeStaticAnalysis
+            ? """
 
-              - name: Build
-                run: swift build -c release
+                if: |
+                  always() &&
+                  needs.format-check.result == 'success' &&
+                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
+                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
+            """ : ""
 
-              - name: Run Tests
-                run: swift test --parallel
+        let stageLabel = includeStaticAnalysis ? "Stage 3" : "Stage 2"
 
-        """
+        return """
+              # ==========================================================================
+              # \(stageLabel): Build & Test
+              # ==========================================================================
+              build-and-test:
+                name: Build & Test
+                runs-on: macos-15\(needsClause)\(ifClause)
+                steps:
+                  - uses: actions/checkout@v4
+
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: |
+                        .build
+                        ~/Library/Developer/Xcode/DerivedData
+                      key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-
+
+                  - name: Build
+                    run: swift build -c release
+
+                  - name: Run Tests with Coverage
+                    run: swift test --parallel --enable-code-coverage
+
+                  - name: Generate Coverage Report
+                    run: |
+                      BIN_PATH=$(swift build --show-bin-path)
+                      PROFDATA=$(find .build -name "*.profdata" | head -1)
+
+                      if [[ -n "$PROFDATA" ]] && [[ -f "$PROFDATA" ]]; then
+                        TEST_BINARY=$(find "$BIN_PATH" -name "*.xctest" -type d | head -1)
+                        if [[ -n "$TEST_BINARY" ]]; then
+                          EXEC_PATH="$TEST_BINARY/Contents/MacOS/$(basename "$TEST_BINARY" .xctest)"
+                          if [[ -f "$EXEC_PATH" ]]; then
+                            xcrun llvm-cov report "$EXEC_PATH" -instr-profile="$PROFDATA" > coverage.txt
+                            echo "Coverage Report:"
+                            cat coverage.txt
+                          fi
+                        fi
+                      fi
+                    continue-on-error: true
+
+            """
     }
 
     /// SPK-based build and test job using hooks
-    static func ciSpkBuildAndTestJob() -> String {
-        """
-          # ==========================================================================
-          # Stage 2: Build & Test (Always runs, depends on format check)
-          # ==========================================================================
-          build-and-test:
-            name: Build & Test
-            runs-on: macos-15
-            needs: format-check
-            steps:
-              - uses: actions/checkout@v4
+    static func ciSpkBuildAndTestJob(
+        needsQualityChecks: Bool = true,
+        includeStaticAnalysis: Bool = false
+    ) -> String {
+        let needs: String
+        if includeStaticAnalysis {
+            needs = "[format-check, unused-check, duplicates-check]"
+        } else {
+            needs = needsQualityChecks ? "format-check" : ""
+        }
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+        let needsClause = needs.isEmpty ? "" : "\n    needs: \(needs)"
 
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: .build
-                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-
+        let ifClause =
+            includeStaticAnalysis
+            ? """
 
-        \(setupSpkStep())
+                if: |
+                  always() &&
+                  needs.format-check.result == 'success' &&
+                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
+                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
+            """ : ""
 
-              - name: Run CI Hooks
-                run: |
-                  ${{ steps.setup-spk.outputs.spk_path }} hooks run ci --fix none
+        let stageLabel = includeStaticAnalysis ? "Stage 3" : "Stage 2"
 
-        """
+        return """
+              # ==========================================================================
+              # \(stageLabel): Build & Test
+              # ==========================================================================
+              build-and-test:
+                name: Build & Test
+                runs-on: macos-15\(needsClause)\(ifClause)
+                steps:
+                  - uses: actions/checkout@v4
+
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: .build
+                      key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-
+
+            \(setupSpkStep())
+
+                  - name: Run CI Hooks
+                    run: |
+                      ${{ steps.setup-spk.outputs.spk_path }} hooks run ci --fix none
+
+            """
     }
 
     // swa:ignore-complexity
-    static func ciCodeQLJob() -> String {
-        """
-          # ==========================================================================
-          # Stage 3: Security Analysis (Always runs, depends on format check)
-          # ==========================================================================
-          codeql:
-            name: CodeQL Analysis
-            runs-on: macos-15
-            needs: format-check
-            steps:
-              - uses: actions/checkout@v4
+    static func ciCodeQLJob(needsTest: Bool = true) -> String {
+        let needsValue = needsTest ? "build-and-test" : "format-check"
+        let stageLabel = needsTest ? "Stage 4" : "Stage 3"
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+        return """
+              # ==========================================================================
+              # \(stageLabel): Security Analysis
+              # ==========================================================================
+              codeql:
+                name: CodeQL Analysis
+                runs-on: macos-15
+                needs: \(needsValue)
+                steps:
+                  - uses: actions/checkout@v4
 
-              - name: Cache SPM Dependencies
-                uses: actions/cache@v4
-                with:
-                  path: |
-                    .build
-                    ~/Library/Developer/Xcode/DerivedData
-                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-                  restore-keys: spm-${{ runner.os }}-
+                  - name: Select Xcode
+                    run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-              - name: Initialize CodeQL
-                uses: github/codeql-action/init@v4
-                with:
-                  languages: swift
-                  build-mode: manual
+                  - name: Cache SPM Dependencies
+                    uses: actions/cache@v4
+                    with:
+                      path: |
+                        .build
+                        ~/Library/Developer/Xcode/DerivedData
+                      key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                      restore-keys: spm-${{ runner.os }}-
 
-              - name: Build for CodeQL
-                run: swift build -c release --arch arm64
+                  - name: Initialize CodeQL
+                    uses: github/codeql-action/init@v4
+                    with:
+                      languages: swift
+                      build-mode: manual
 
-              - name: Perform CodeQL Analysis
-                uses: github/codeql-action/analyze@v4
-                with:
-                  category: "/language:swift"
+                  - name: Build for CodeQL
+                    run: swift build -c release --arch arm64
 
-        """
+                  - name: Perform CodeQL Analysis
+                    uses: github/codeql-action/analyze@v4
+                    with:
+                      category: "/language:swift"
+
+            """
     }
 
     // swa:ignore-complexity

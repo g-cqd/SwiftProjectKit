@@ -26,14 +26,76 @@ concurrency:
 
 env:
   XCODE_VERSION: '26.1.1'
+  SWA_VERSION: '1.0.6'
 
 jobs:
   # ============================================================================
-  # Stage 1: Code Quality (Always runs)
+  # Stage 1: Setup - Cache SWA and SPK binaries
+  # ============================================================================
+  setup:
+    name: Setup Tools
+    runs-on: macos-15
+    outputs:
+      swa_path: ${{ steps.swa.outputs.path }}
+      spk_path: ${{ steps.spk.outputs.path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Cache SWA Binary
+        id: swa-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/swa
+          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+      - name: Download SWA
+        if: steps.swa-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/bin
+          DOWNLOAD_URL="https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v${{ env.SWA_VERSION }}/swa-${{ env.SWA_VERSION }}-macos-universal.tar.gz"
+          echo "Downloading SWA from ${DOWNLOAD_URL}..."
+          if curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz 2>/dev/null; then
+            tar -xzf /tmp/swa.tar.gz -C ~/.local/bin
+            chmod +x ~/.local/bin/swa
+            echo "Downloaded SWA ${{ env.SWA_VERSION }}"
+          else
+            echo "Failed to download SWA, will skip analysis checks"
+          fi
+
+      - name: Verify SWA
+        id: swa
+        run: |
+          if [[ -x ~/.local/bin/swa ]]; then
+            echo "path=$HOME/.local/bin/swa" >> $GITHUB_OUTPUT
+            ~/.local/bin/swa --version || true
+          else
+            echo "path=" >> $GITHUB_OUTPUT
+            echo "SWA not available"
+          fi
+
+      - name: Cache SPM Dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build SPK
+        id: spk
+        run: |
+          swift build --product spk
+          echo "path=$(pwd)/.build/debug/spk" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # Stage 2: Code Quality Checks (Parallel)
   # ============================================================================
   format-check:
     name: Format Check
     runs-on: macos-15
+    needs: setup
     steps:
       - uses: actions/checkout@v4
 
@@ -82,13 +144,70 @@ jobs:
       - name: Check Formatting
         run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
 
+  unused-check:
+    name: Unused Code Check
+    runs-on: macos-15
+    needs: setup
+    if: needs.setup.outputs.swa_path != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Restore SWA Binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/swa
+          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+      - name: Check Unused Code
+        run: |
+          ~/.local/bin/swa unused \
+            --mode reachability \
+            --paths Sources/ \
+            --exclude-paths .build/ \
+            --format xcode
+        continue-on-error: true
+
+  duplicates-check:
+    name: Duplicates Check
+    runs-on: macos-15
+    needs: setup
+    if: needs.setup.outputs.swa_path != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Restore SWA Binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/swa
+          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+
+      - name: Check Duplicates
+        run: |
+          ~/.local/bin/swa duplicates \
+            --min-tokens 100 \
+            --paths Sources/ \
+            --exclude-paths .build/ \
+            --format xcode
+        continue-on-error: true
+
   # ============================================================================
-  # Stage 2: Build & Test (Always runs, depends on format check)
+  # Stage 3: Tests with Coverage (After quality checks)
   # ============================================================================
-  build-and-test:
+  test:
     name: Build & Test
     runs-on: macos-15
-    needs: format-check
+    needs: [format-check, unused-check, duplicates-check]
+    if: |
+      always() &&
+      needs.format-check.result == 'success' &&
+      (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
+      (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
     steps:
       - uses: actions/checkout@v4
 
@@ -98,52 +217,47 @@ jobs:
       - name: Cache SPM Dependencies
         uses: actions/cache@v4
         with:
-          path: .build
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
 
-      - name: Setup SPK
-        id: setup-spk
+      - name: Build
+        run: swift build -c release
+
+      - name: Run Tests with Coverage
         run: |
-          SPK_BINARY=".build/debug/spk"
-          SPK_AVAILABLE=false
+          swift test --parallel --enable-code-coverage
 
-          # Get latest release tag from GitHub
-          echo "Fetching latest spk release..."
-          LATEST_TAG=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\///' | tr -d '\r\n')
+      - name: Generate Coverage Report
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          PROFDATA=$(find .build -name "*.profdata" | head -1)
 
-          if [[ -n "$LATEST_TAG" ]]; then
-            SPK_VERSION="${LATEST_TAG#v}"
-            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_TAG}/spk-${SPK_VERSION}-macos-universal.tar.gz"
-            echo "Attempting to download spk ${LATEST_TAG}..."
-            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
-              mkdir -p .build/debug
-              tar -xzf /tmp/spk.tar.gz -C .build/debug
-              chmod +x "$SPK_BINARY"
-              SPK_AVAILABLE=true
-              echo "Downloaded spk ${LATEST_TAG}"
+          if [[ -n "$PROFDATA" ]] && [[ -f "$PROFDATA" ]]; then
+            # Find test binary
+            TEST_BINARY=$(find "$BIN_PATH" -name "*.xctest" -type d | head -1)
+            if [[ -n "$TEST_BINARY" ]]; then
+              EXEC_PATH="$TEST_BINARY/Contents/MacOS/$(basename "$TEST_BINARY" .xctest)"
+              if [[ -f "$EXEC_PATH" ]]; then
+                xcrun llvm-cov report "$EXEC_PATH" -instr-profile="$PROFDATA" > coverage.txt
+                echo "Coverage Report:"
+                cat coverage.txt
+              fi
             fi
+          else
+            echo "No profdata found, skipping coverage report"
           fi
-
-          # Fall back to building from source
-          if [[ "$SPK_AVAILABLE" != "true" ]]; then
-            echo "Building spk from source..."
-            swift build --product spk
-            echo "Built spk from source"
-          fi
-
-          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
-
-      - name: Run CI Hooks
-        run: ${{ steps.setup-spk.outputs.spk_path }} hooks run ci --fix none
+        continue-on-error: true
 
   # ============================================================================
-  # Stage 3: Security Analysis (Always runs, depends on format check)
+  # Stage 4: Security Analysis (After tests)
   # ============================================================================
   codeql:
     name: CodeQL Analysis
     runs-on: macos-15
-    needs: format-check
+    needs: test
     steps:
       - uses: actions/checkout@v4
 
@@ -174,12 +288,12 @@ jobs:
           category: "/language:swift"
 
   # ============================================================================
-  # Stage 4: Prepare Release (on tags, manual dispatch, or push to main)
+  # Stage 5: Prepare Release (After tests, parallel with CodeQL)
   # ============================================================================
   prepare-release:
     name: Prepare Release
     runs-on: macos-15
-    needs: build-and-test
+    needs: test
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release) || github.event_name == 'push'
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -300,7 +414,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
   # ============================================================================
-  # Stage 5: Create Release with Binaries and Homebrew Formula
+  # Stage 6: Create Release with Binaries and Homebrew Formula
   # ============================================================================
   release:
     name: Create Release
