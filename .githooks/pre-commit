@@ -1,8 +1,10 @@
 #!/bin/sh
 # SwiftProjectKit pre-commit hook
 
-# Use global spk if available, otherwise download latest release
-if command -v spk >/dev/null 2>&1; then
+# Prefer local debug build (for development), then global spk
+if [ -x ".build/debug/spk" ]; then
+    exec .build/debug/spk hooks run pre-commit
+elif command -v spk >/dev/null 2>&1; then
     exec spk hooks run pre-commit
 else
     SPK=".build/spk"
