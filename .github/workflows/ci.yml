@@ -26,7 +26,7 @@ concurrency:
 
 env:
   XCODE_VERSION: '26.1.1'
-  SWA_VERSION: '1.0.6'
+  SWA_VERSION: '0.0.23'
 
 jobs:
   # ============================================================================
@@ -222,9 +222,6 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData
           key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
           restore-keys: spm-${{ runner.os }}-
-
-      - name: Build
-        run: swift build -c release
 
       - name: Run Tests with Coverage
         run: |

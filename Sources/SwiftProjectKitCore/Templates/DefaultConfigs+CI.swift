@@ -6,7 +6,7 @@ import Foundation
 
 extension DefaultConfigs {
     /// Default SWA version for CI workflows
-    public static let defaultSWAVersion = "1.0.6"
+    public static let defaultSWAVersion = "0.0.23"
 
     /// Default Xcode version for CI workflows
     public static let defaultXcodeVersion = "26.1.1"
@@ -449,9 +449,6 @@ extension DefaultConfigs {
                         ~/Library/Developer/Xcode/DerivedData
                       key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
                       restore-keys: spm-${{ runner.os }}-
-
-                  - name: Build
-                    run: swift build -c release
 
                   - name: Run Tests with Coverage
                     run: swift test --parallel --enable-code-coverage

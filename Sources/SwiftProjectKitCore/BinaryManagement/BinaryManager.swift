@@ -25,7 +25,7 @@ public enum ManagedTool: String, Sendable, CaseIterable {
     /// Default pinned version
     public var defaultVersion: String {
         switch self {
-        case .swa: "0.0.16"
+        case .swa: "0.0.23"
         }
     }
 

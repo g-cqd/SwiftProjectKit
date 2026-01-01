@@ -110,7 +110,7 @@ struct ManagedToolTests {
     func swaDefaultVersion() {
         let version = ManagedTool.swa.defaultVersion
 
-        #expect(version == "0.0.16", "SWA should be pinned to 0.0.16")
+        #expect(version == "0.0.23", "SWA should be pinned to 0.0.23")
     }
 
     // MARK: - Asset Names
