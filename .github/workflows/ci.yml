@@ -16,13 +16,15 @@ on:
         description: 'Version override (e.g., 1.0.0)'
         required: false
 
-permissions:
-  contents: write
-  security-events: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  security-events: write
 
 env:
   XCODE_VERSION: '26.1.1'
@@ -30,186 +32,130 @@ env:
 
 jobs:
   # ============================================================================
-  # Stage 1: Setup - Cache SWA and SPK binaries
+  # STAGE 1: Setup & Code Quality Checks (parallel)
   # ============================================================================
-  setup:
-    name: Setup Tools
+  setup-swa:
+    name: Setup SWA
     runs-on: macos-15
-    outputs:
-      swa_path: ${{ steps.swa.outputs.path }}
-      spk_path: ${{ steps.spk.outputs.path }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
       - name: Cache SWA Binary
-        id: swa-cache
+        id: cache-swa
         uses: actions/cache@v4
         with:
-          path: ~/.local/bin/swa
+          path: /usr/local/bin/swa
           key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
 
       - name: Download SWA
-        if: steps.swa-cache.outputs.cache-hit != 'true'
+        if: steps.cache-swa.outputs.cache-hit != 'true'
         run: |
-          mkdir -p ~/.local/bin
           DOWNLOAD_URL="https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v${{ env.SWA_VERSION }}/swa-${{ env.SWA_VERSION }}-macos-universal.tar.gz"
           echo "Downloading SWA from ${DOWNLOAD_URL}..."
-          if curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz 2>/dev/null; then
-            tar -xzf /tmp/swa.tar.gz -C ~/.local/bin
-            chmod +x ~/.local/bin/swa
-            echo "Downloaded SWA ${{ env.SWA_VERSION }}"
-          else
-            echo "Failed to download SWA, will skip analysis checks"
-          fi
+          curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz
+          tar -xzf /tmp/swa.tar.gz -C /tmp
+          sudo mv /tmp/swa /usr/local/bin/swa
+          sudo chmod +x /usr/local/bin/swa
+          echo "Installed SWA ${{ env.SWA_VERSION }}"
 
-      - name: Verify SWA
-        id: swa
-        run: |
-          if [[ -x ~/.local/bin/swa ]]; then
-            echo "path=$HOME/.local/bin/swa" >> $GITHUB_OUTPUT
-            ~/.local/bin/swa --version || true
-          else
-            echo "path=" >> $GITHUB_OUTPUT
-            echo "SWA not available"
-          fi
-
-      - name: Cache SPM Dependencies
-        uses: actions/cache@v4
+      - name: Upload SWA Binary
+        uses: actions/upload-artifact@v4
         with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
+          name: swa-binary
+          path: /usr/local/bin/swa
+          retention-days: 1
 
-      - name: Build SPK
-        id: spk
-        run: |
-          swift build --product spk
-          echo "path=$(pwd)/.build/debug/spk" >> $GITHUB_OUTPUT
-
-  # ============================================================================
-  # Stage 2: Code Quality Checks (Parallel)
-  # ============================================================================
   format-check:
     name: Format Check
     runs-on: macos-15
-    needs: setup
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Cache SPM Dependencies
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
-
-      - name: Setup SPK
-        id: setup-spk
-        run: |
-          SPK_BINARY=".build/debug/spk"
-          SPK_AVAILABLE=false
-
-          # Get latest release tag from GitHub
-          echo "Fetching latest spk release..."
-          LATEST_TAG=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\///' | tr -d '\r\n')
-
-          if [[ -n "$LATEST_TAG" ]]; then
-            SPK_VERSION="${LATEST_TAG#v}"
-            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_TAG}/spk-${SPK_VERSION}-macos-universal.tar.gz"
-            echo "Attempting to download spk ${LATEST_TAG}..."
-            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
-              mkdir -p .build/debug
-              tar -xzf /tmp/spk.tar.gz -C .build/debug
-              chmod +x "$SPK_BINARY"
-              SPK_AVAILABLE=true
-              echo "Downloaded spk ${LATEST_TAG}"
-            fi
-          fi
-
-          # Fall back to building from source
-          if [[ "$SPK_AVAILABLE" != "true" ]]; then
-            echo "Building spk from source..."
-            swift build --product spk
-            echo "Built spk from source"
-          fi
-
-          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
 
       - name: Check Formatting
-        run: ${{ steps.setup-spk.outputs.spk_path }} format --lint
-
-  unused-check:
-    name: Unused Code Check
-    runs-on: macos-15
-    needs: setup
-    if: needs.setup.outputs.swa_path != ''
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Restore SWA Binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/bin/swa
-          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
-
-      - name: Check Unused Code
         run: |
-          ~/.local/bin/swa unused \
-            --mode reachability \
-            --paths Sources/ \
-            --exclude-paths .build/ \
-            --format xcode
-        continue-on-error: true
+          # Read paths from .spk.json
+          PATHS=$(jq -r '.hooks.tasks.format.paths // ["Sources/", "Tests/", "Plugins/"] | .[]' .spk.json | tr '\n' ' ')
+
+          # Find all Swift files
+          FILES=$(find $PATHS -name '*.swift' 2>/dev/null)
+
+          # Run swift-format on files
+          if [[ -n "$FILES" ]]; then
+            echo "$FILES" | xargs swift format lint --strict --parallel --ignore-unparsable-files
+          else
+            echo "No Swift files to check"
+          fi
 
   duplicates-check:
     name: Duplicates Check
     runs-on: macos-15
-    needs: setup
-    if: needs.setup.outputs.swa_path != ''
+    needs: setup-swa
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Restore SWA Binary
-        uses: actions/cache@v4
+      - name: Download SWA Binary
+        uses: actions/download-artifact@v4
         with:
-          path: ~/.local/bin/swa
-          key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+          name: swa-binary
+          path: /tmp
+
+      - name: Setup SWA
+        run: |
+          sudo mv /tmp/swa /usr/local/bin/swa
+          sudo chmod +x /usr/local/bin/swa
 
       - name: Check Duplicates
         run: |
-          ~/.local/bin/swa duplicates \
+          swa duplicates Sources \
             --min-tokens 100 \
-            --paths Sources/ \
-            --exclude-paths .build/ \
-            --format xcode
+            --format text
+        continue-on-error: true
+
+  unused-check:
+    name: Unused Code Check
+    runs-on: macos-15
+    needs: setup-swa
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SWA Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: swa-binary
+          path: /tmp
+
+      - name: Setup SWA
+        run: |
+          sudo mv /tmp/swa /usr/local/bin/swa
+          sudo chmod +x /usr/local/bin/swa
+
+      - name: Check Unused Code
+        run: |
+          swa unused Sources \
+            --mode reachability \
+            --sensible-defaults \
+            --format text
         continue-on-error: true
 
   # ============================================================================
-  # Stage 3: Tests with Coverage (After quality checks)
+  # STAGE 2: Test with Coverage
   # ============================================================================
   test:
-    name: Build & Test
+    name: Test
     runs-on: macos-15
-    needs: [format-check, unused-check, duplicates-check]
+    needs: [format-check, duplicates-check, unused-check]
     if: |
       always() &&
       needs.format-check.result == 'success' &&
-      (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
-      (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
+      (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped') &&
+      (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped')
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
@@ -224,44 +170,63 @@ jobs:
           restore-keys: spm-${{ runner.os }}-
 
       - name: Run Tests with Coverage
-        run: |
-          swift test --parallel --enable-code-coverage
+        run: swift test --parallel --enable-code-coverage
 
       - name: Generate Coverage Report
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          PROFDATA=$(find .build -name "*.profdata" | head -1)
+          XCTEST_PATH=$(find "$BIN_PATH" -name '*.xctest' -type d | head -1)
+          PROFDATA_PATH=$(find .build -name 'default.profdata' -type f | head -1)
 
-          if [[ -n "$PROFDATA" ]] && [[ -f "$PROFDATA" ]]; then
-            # Find test binary
-            TEST_BINARY=$(find "$BIN_PATH" -name "*.xctest" -type d | head -1)
-            if [[ -n "$TEST_BINARY" ]]; then
-              EXEC_PATH="$TEST_BINARY/Contents/MacOS/$(basename "$TEST_BINARY" .xctest)"
-              if [[ -f "$EXEC_PATH" ]]; then
-                xcrun llvm-cov report "$EXEC_PATH" -instr-profile="$PROFDATA" > coverage.txt
-                echo "Coverage Report:"
-                cat coverage.txt
-              fi
-            fi
+          if [[ -n "$XCTEST_PATH" && -n "$PROFDATA_PATH" ]]; then
+            EXEC_NAME=$(basename "$XCTEST_PATH" .xctest)
+            EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$EXEC_NAME"
+
+            xcrun llvm-cov export \
+              "$EXEC_PATH" \
+              -instr-profile="$PROFDATA_PATH" \
+              -format=lcov \
+              -ignore-filename-regex='.build|Tests|Fixtures' \
+              > coverage.lcov
+
+            xcrun llvm-cov report \
+              "$EXEC_PATH" \
+              -instr-profile="$PROFDATA_PATH" \
+              -ignore-filename-regex='.build|Tests|Fixtures' \
+              > coverage.txt
+
+            echo "Coverage Summary:"
+            cat coverage.txt
           else
-            echo "No profdata found, skipping coverage report"
+            echo "Could not find xctest or profdata files"
           fi
         continue-on-error: true
 
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.lcov
+            coverage.txt
+          retention-days: 30
+        continue-on-error: true
+
   # ============================================================================
-  # Stage 4: Security Analysis (After tests)
+  # STAGE 3: CodeQL, Prepare Release, Docs (after tests)
   # ============================================================================
   codeql:
     name: CodeQL Analysis
     runs-on: macos-15
     needs: test
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-      - name: Cache SPM Dependencies
+      - name: Restore SPM Cache
         uses: actions/cache@v4
         with:
           path: |
@@ -284,9 +249,6 @@ jobs:
         with:
           category: "/language:swift"
 
-  # ============================================================================
-  # Stage 5: Prepare Release (After tests, parallel with CodeQL)
-  # ============================================================================
   prepare-release:
     name: Prepare Release
     runs-on: macos-15
@@ -298,59 +260,15 @@ jobs:
       should_release: ${{ steps.version.outputs.should_release }}
       changelog: ${{ steps.changelog.outputs.content }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-      - name: Cache SPM Dependencies
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: spm-${{ runner.os }}-
-
-      - name: Setup SPK
-        id: setup-spk
-        run: |
-          SPK_BINARY=".build/debug/spk"
-          SPK_AVAILABLE=false
-
-          # Get latest release tag from GitHub
-          echo "Fetching latest spk release..."
-          LATEST_TAG=$(curl -sI "https://github.com/g-cqd/SwiftProjectKit/releases/latest" | grep -i "^location:" | sed 's/.*tag\///' | tr -d '\r\n')
-
-          if [[ -n "$LATEST_TAG" ]]; then
-            SPK_VERSION="${LATEST_TAG#v}"
-            DOWNLOAD_URL="https://github.com/g-cqd/SwiftProjectKit/releases/download/${LATEST_TAG}/spk-${SPK_VERSION}-macos-universal.tar.gz"
-            echo "Attempting to download spk ${LATEST_TAG}..."
-            if curl -fsSL "$DOWNLOAD_URL" -o /tmp/spk.tar.gz 2>/dev/null; then
-              mkdir -p .build/debug
-              tar -xzf /tmp/spk.tar.gz -C .build/debug
-              chmod +x "$SPK_BINARY"
-              SPK_AVAILABLE=true
-              echo "Downloaded spk ${LATEST_TAG}"
-            fi
-          fi
-
-          # Fall back to building from source
-          if [[ "$SPK_AVAILABLE" != "true" ]]; then
-            echo "Building spk from source..."
-            swift build --product spk
-            echo "Built spk from source"
-          fi
-
-          echo "spk_path=$SPK_BINARY" >> $GITHUB_OUTPUT
 
       - name: Determine Version
         id: version
         run: |
-          # Try spk version first, fall back to .spk.json parsing
-          if VERSION=$(${{ steps.setup-spk.outputs.spk_path }} version --quiet 2>/dev/null); then
-            echo "Got version from spk: ${VERSION}"
-          elif [[ -f ".spk.json" ]] && command -v jq &> /dev/null; then
+          if [[ -f ".spk.json" ]]; then
             VERSION=$(jq -r '.project.version // empty' .spk.json)
           elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
@@ -365,7 +283,6 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
-          # Check if this version already has a tag (skip release if so)
           if git rev-parse "${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists - skipping release"
             echo "should_release=false" >> $GITHUB_OUTPUT
@@ -383,7 +300,6 @@ jobs:
           {
             echo "content<<EOF"
 
-            # Features
             FEATURES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^feat" --grep="^add" --grep="^new" -i 2>/dev/null | head -20 || echo "")
             if [[ -n "$FEATURES" ]]; then
               echo "### Features"
@@ -391,7 +307,6 @@ jobs:
               echo ""
             fi
 
-            # Bug Fixes
             FIXES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^fix" -i 2>/dev/null | head -20 || echo "")
             if [[ -n "$FIXES" ]]; then
               echo "### Bug Fixes"
@@ -399,7 +314,6 @@ jobs:
               echo ""
             fi
 
-            # Other changes
             OTHER=$(git log $RANGE --pretty=format:"- %s (%h)" --invert-grep --grep="^feat" --grep="^fix" --grep="^add" --grep="^new" -i 2>/dev/null | head -15 || echo "")
             if [[ -n "$OTHER" ]]; then
               echo "### Other Changes"
@@ -410,8 +324,44 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
+  docs:
+    name: Build Documentation
+    runs-on: macos-15
+    needs: test
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+      - name: Restore SPM Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Build Documentation
+        run: |
+          swift package --allow-writing-to-directory ./docs \
+            generate-documentation \
+            --target SwiftProjectKitCore \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --hosting-base-path SwiftProjectKit \
+            --output-path ./docs
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+
   # ============================================================================
-  # Stage 6: Create Release with Binaries and Homebrew Formula
+  # STAGE 4: Release (after prepare-release)
   # ============================================================================
   release:
     name: Create Release
@@ -419,12 +369,13 @@ jobs:
     needs: prepare-release
     if: needs.prepare-release.outputs.should_release == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
-      - name: Cache SPM Dependencies
+      - name: Restore SPM Cache
         uses: actions/cache@v4
         with:
           path: |
@@ -435,15 +386,12 @@ jobs:
 
       - name: Build Universal Binary
         run: |
-          # Build for ARM64
           swift build -c release --arch arm64
           cp .build/arm64-apple-macosx/release/spk .build/spk-arm64
 
-          # Build for x86_64
           swift build -c release --arch x86_64
           cp .build/x86_64-apple-macosx/release/spk .build/spk-x86_64
 
-          # Create universal binary
           mkdir -p .build/release
           lipo -create -output .build/release/spk \
             .build/spk-arm64 \
@@ -472,10 +420,8 @@ jobs:
           VERSION="${{ needs.prepare-release.outputs.version }}"
           TAG="${{ needs.prepare-release.outputs.tag }}"
 
-          # Read checksums
           ARM64_SHA=$(grep "arm64" release/checksums.txt | awk '{print $1}')
           X86_SHA=$(grep "x86_64" release/checksums.txt | awk '{print $1}')
-          UNIVERSAL_SHA=$(grep "universal" release/checksums.txt | awk '{print $1}')
 
           cat > release/spk.rb << FORMULA_EOF
           class Spk < Formula
@@ -567,3 +513,19 @@ jobs:
             release/spk.rb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================================
+  # Deploy Documentation (after docs build)
+  # ============================================================================
+  deploy-docs:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    needs: docs
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
