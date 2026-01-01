@@ -24,6 +24,9 @@ extension DefaultConfigs {
     ///   - useSpk: Whether to use spk for CI tasks (format, build, test via hooks)
     ///   - includeStaticAnalysis: Whether to include unused/duplicates checks (default: false)
     ///   - swaVersion: SwiftStaticAnalysis version for static analysis (default: 1.0.6)
+    ///   - includeDocs: Whether to include documentation generation and deployment (default: false)
+    ///   - docsTarget: The target to generate documentation for (required if includeDocs is true)
+    ///   - hostingBasePath: The base path for static hosting, usually the repo name (defaults to project name)
     /// - Returns: The complete workflow YAML string
     public static func ciWorkflow(
         name: String,
@@ -36,19 +39,23 @@ extension DefaultConfigs {
         homebrewTap: String? = nil,
         useSpk: Bool = false,
         includeStaticAnalysis: Bool = false,
-        swaVersion: String = defaultSWAVersion
+        swaVersion: String = defaultSWAVersion,
+        includeDocs: Bool = false,
+        docsTarget: String? = nil,
+        hostingBasePath: String? = nil
     ) -> String {
         let resolvedBinaryName = binaryName ?? name.lowercased()
 
         var workflow = ciWorkflowHeader(
             includeRelease: includeRelease,
+            includeDocs: includeDocs,
             includeStaticAnalysis: includeStaticAnalysis,
             swaVersion: swaVersion
         )
 
         // Stage 1: Setup (if static analysis is enabled)
         if includeStaticAnalysis {
-            workflow += ciSetupJob(swaVersion: swaVersion)
+            workflow += ciSetupSWAJob(swaVersion: swaVersion)
         }
 
         // Stage 2: Quality checks (parallel)
@@ -98,6 +105,13 @@ extension DefaultConfigs {
             }
         }
 
+        // Documentation generation and deployment
+        if includeDocs, let target = docsTarget {
+            let basePath = hostingBasePath ?? name
+            workflow += ciDocsJob(targetName: target, hostingBasePath: basePath)
+            workflow += ciDeployDocsJob()
+        }
+
         return workflow
     }
 }
@@ -108,6 +122,7 @@ extension DefaultConfigs {
     // swa:ignore-complexity
     static func ciWorkflowHeader(
         includeRelease: Bool,
+        includeDocs: Bool = false,
         includeStaticAnalysis: Bool = false,
         swaVersion: String = defaultSWAVersion
     ) -> String {
@@ -138,18 +153,14 @@ extension DefaultConfigs {
                 branches: [main]
             """
 
-        let permissions =
-            includeRelease
-            ? """
-            permissions:
-              contents: write
-              security-events: write
-            """
-            : """
-            permissions:
-              contents: read
-              security-events: write
-            """
+        var permissionLines = ["permissions:"]
+        permissionLines.append("  contents: \(includeRelease ? "write" : "read")")
+        if includeDocs {
+            permissionLines.append("  pages: write")
+            permissionLines.append("  id-token: write")
+        }
+        permissionLines.append("  security-events: write")
+        let permissions = permissionLines.joined(separator: "\n")
 
         let envVars =
             includeStaticAnalysis
@@ -184,55 +195,41 @@ extension DefaultConfigs {
 // MARK: - Setup Job
 
 extension DefaultConfigs {
-    /// Job that caches SWA binary for static analysis
-    static func ciSetupJob(swaVersion: String = defaultSWAVersion) -> String {
+    /// Job that caches SWA binary for static analysis and uploads as artifact
+    static func ciSetupSWAJob(swaVersion: String = defaultSWAVersion) -> String {
         """
 
           # ==========================================================================
-          # Stage 1: Setup - Cache SWA binary
+          # Stage 1: Setup SWA
           # ==========================================================================
-          setup:
-            name: Setup Tools
+          setup-swa:
+            name: Setup SWA
             runs-on: macos-15
-            outputs:
-              swa_path: ${{ steps.swa.outputs.path }}
             steps:
-              - uses: actions/checkout@v4
-
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
               - name: Cache SWA Binary
-                id: swa-cache
+                id: cache-swa
                 uses: actions/cache@v4
                 with:
-                  path: ~/.local/bin/swa
+                  path: /usr/local/bin/swa
                   key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
 
               - name: Download SWA
-                if: steps.swa-cache.outputs.cache-hit != 'true'
+                if: steps.cache-swa.outputs.cache-hit != 'true'
                 run: |
-                  mkdir -p ~/.local/bin
                   DOWNLOAD_URL="https://github.com/g-cqd/SwiftStaticAnalysis/releases/download/v${{ env.SWA_VERSION }}/swa-${{ env.SWA_VERSION }}-macos-universal.tar.gz"
                   echo "Downloading SWA from ${DOWNLOAD_URL}..."
-                  if curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz 2>/dev/null; then
-                    tar -xzf /tmp/swa.tar.gz -C ~/.local/bin
-                    chmod +x ~/.local/bin/swa
-                    echo "Downloaded SWA ${{ env.SWA_VERSION }}"
-                  else
-                    echo "Failed to download SWA"
-                  fi
+                  curl -fsSL "$DOWNLOAD_URL" -o /tmp/swa.tar.gz
+                  tar -xzf /tmp/swa.tar.gz -C /tmp
+                  sudo mv /tmp/swa /usr/local/bin/swa
+                  sudo chmod +x /usr/local/bin/swa
+                  echo "Installed SWA ${{ env.SWA_VERSION }}"
 
-              - name: Verify SWA
-                id: swa
-                run: |
-                  if [[ -x ~/.local/bin/swa ]]; then
-                    echo "path=$HOME/.local/bin/swa" >> $GITHUB_OUTPUT
-                    ~/.local/bin/swa --version || true
-                  else
-                    echo "path=" >> $GITHUB_OUTPUT
-                    echo "SWA not available"
-                  fi
+              - name: Upload SWA Binary
+                uses: actions/upload-artifact@v4
+                with:
+                  name: swa-binary
+                  path: /usr/local/bin/swa
+                  retention-days: 1
 
         """
     }
@@ -243,27 +240,28 @@ extension DefaultConfigs {
           unused-check:
             name: Unused Code Check
             runs-on: macos-15
-            needs: setup
-            if: needs.setup.outputs.swa_path != ''
+            needs: setup-swa
             steps:
-              - uses: actions/checkout@v4
+              - name: Checkout
+                uses: actions/checkout@v4
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-              - name: Restore SWA Binary
-                uses: actions/cache@v4
+              - name: Download SWA Binary
+                uses: actions/download-artifact@v4
                 with:
-                  path: ~/.local/bin/swa
-                  key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+                  name: swa-binary
+                  path: /tmp
+
+              - name: Setup SWA
+                run: |
+                  sudo mv /tmp/swa /usr/local/bin/swa
+                  sudo chmod +x /usr/local/bin/swa
 
               - name: Check Unused Code
                 run: |
-                  ~/.local/bin/swa unused \\
+                  swa unused Sources \\
                     --mode reachability \\
-                    --paths Sources/ \\
-                    --exclude-paths .build/ \\
-                    --format xcode
+                    --sensible-defaults \\
+                    --format text
                 continue-on-error: true
 
         """
@@ -275,27 +273,27 @@ extension DefaultConfigs {
           duplicates-check:
             name: Duplicates Check
             runs-on: macos-15
-            needs: setup
-            if: needs.setup.outputs.swa_path != ''
+            needs: setup-swa
             steps:
-              - uses: actions/checkout@v4
+              - name: Checkout
+                uses: actions/checkout@v4
 
-              - name: Select Xcode
-                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
-
-              - name: Restore SWA Binary
-                uses: actions/cache@v4
+              - name: Download SWA Binary
+                uses: actions/download-artifact@v4
                 with:
-                  path: ~/.local/bin/swa
-                  key: swa-${{ runner.os }}-${{ env.SWA_VERSION }}
+                  name: swa-binary
+                  path: /tmp
+
+              - name: Setup SWA
+                run: |
+                  sudo mv /tmp/swa /usr/local/bin/swa
+                  sudo chmod +x /usr/local/bin/swa
 
               - name: Check Duplicates
                 run: |
-                  ~/.local/bin/swa duplicates \\
+                  swa duplicates Sources \\
                     --min-tokens 100 \\
-                    --paths Sources/ \\
-                    --exclude-paths .build/ \\
-                    --format xcode
+                    --format text
                 continue-on-error: true
 
         """
@@ -345,7 +343,7 @@ extension DefaultConfigs {
     }
 
     static func ciLintJob(needsSetup: Bool = false) -> String {
-        let needs = needsSetup ? "\n    needs: setup" : ""
+        let needs = needsSetup ? "\n    needs: setup-swa" : ""
         let stageLabel = needsSetup ? "Stage 2" : "Stage 1"
 
         return """
@@ -357,20 +355,37 @@ extension DefaultConfigs {
                 name: Format Check
                 runs-on: macos-15\(needs)
                 steps:
-                  - uses: actions/checkout@v4
+                  - name: Checkout
+                    uses: actions/checkout@v4
 
                   - name: Select Xcode
                     run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
 
                   - name: Check Formatting
-                    run: xcrun swift-format lint --strict --parallel --recursive .
+                    run: |
+                      # Read paths from .spk.json if available
+                      if [[ -f ".spk.json" ]] && command -v jq &> /dev/null; then
+                        PATHS=$(jq -r '.hooks.tasks.format.paths // ["Sources/", "Tests/", "Plugins/"] | .[]' .spk.json | tr '\\n' ' ')
+                      else
+                        PATHS="Sources/ Tests/ Plugins/"
+                      fi
+
+                      # Find all Swift files
+                      FILES=$(find $PATHS -name '*.swift' 2>/dev/null)
+
+                      # Run swift-format on files
+                      if [[ -n "$FILES" ]]; then
+                        echo "$FILES" | xargs swift format lint --strict --parallel --ignore-unparsable-files
+                      else
+                        echo "No Swift files to check"
+                      fi
 
             """
     }
 
     /// SPK-based lint job using spk format
     static func ciSpkLintJob(needsSetup: Bool = false) -> String {
-        let needs = needsSetup ? "\n    needs: setup" : ""
+        let needs = needsSetup ? "\n    needs: setup-swa" : ""
         let stageLabel = needsSetup ? "Stage 2" : "Stage 1"
 
         return """
@@ -408,7 +423,7 @@ extension DefaultConfigs {
     ) -> String {
         let needs: String
         if includeStaticAnalysis {
-            needs = "[format-check, unused-check, duplicates-check]"
+            needs = "[format-check, duplicates-check, unused-check]"
         } else {
             needs = needsQualityChecks ? "format-check" : ""
         }
@@ -422,21 +437,22 @@ extension DefaultConfigs {
                 if: |
                   always() &&
                   needs.format-check.result == 'success' &&
-                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
-                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
+                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped') &&
+                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped')
             """ : ""
 
         let stageLabel = includeStaticAnalysis ? "Stage 3" : "Stage 2"
 
         return """
               # ==========================================================================
-              # \(stageLabel): Build & Test
+              # \(stageLabel): Test with Coverage
               # ==========================================================================
-              build-and-test:
-                name: Build & Test
+              test:
+                name: Test
                 runs-on: macos-15\(needsClause)\(ifClause)
                 steps:
-                  - uses: actions/checkout@v4
+                  - name: Checkout
+                    uses: actions/checkout@v4
 
                   - name: Select Xcode
                     run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
@@ -456,32 +472,54 @@ extension DefaultConfigs {
                   - name: Generate Coverage Report
                     run: |
                       BIN_PATH=$(swift build --show-bin-path)
-                      PROFDATA=$(find .build -name "*.profdata" | head -1)
+                      XCTEST_PATH=$(find "$BIN_PATH" -name '*.xctest' -type d | head -1)
+                      PROFDATA_PATH=$(find .build -name 'default.profdata' -type f | head -1)
 
-                      if [[ -n "$PROFDATA" ]] && [[ -f "$PROFDATA" ]]; then
-                        TEST_BINARY=$(find "$BIN_PATH" -name "*.xctest" -type d | head -1)
-                        if [[ -n "$TEST_BINARY" ]]; then
-                          EXEC_PATH="$TEST_BINARY/Contents/MacOS/$(basename "$TEST_BINARY" .xctest)"
-                          if [[ -f "$EXEC_PATH" ]]; then
-                            xcrun llvm-cov report "$EXEC_PATH" -instr-profile="$PROFDATA" > coverage.txt
-                            echo "Coverage Report:"
-                            cat coverage.txt
-                          fi
-                        fi
+                      if [[ -n "$XCTEST_PATH" && -n "$PROFDATA_PATH" ]]; then
+                        EXEC_NAME=$(basename "$XCTEST_PATH" .xctest)
+                        EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$EXEC_NAME"
+
+                        xcrun llvm-cov export \\
+                          "$EXEC_PATH" \\
+                          -instr-profile="$PROFDATA_PATH" \\
+                          -format=lcov \\
+                          -ignore-filename-regex='.build|Tests|Fixtures' \\
+                          > coverage.lcov
+
+                        xcrun llvm-cov report \\
+                          "$EXEC_PATH" \\
+                          -instr-profile="$PROFDATA_PATH" \\
+                          -ignore-filename-regex='.build|Tests|Fixtures' \\
+                          > coverage.txt
+
+                        echo "Coverage Summary:"
+                        cat coverage.txt
+                      else
+                        echo "Could not find xctest or profdata files"
                       fi
+                    continue-on-error: true
+
+                  - name: Upload Coverage Artifact
+                    uses: actions/upload-artifact@v4
+                    with:
+                      name: coverage-report
+                      path: |
+                        coverage.lcov
+                        coverage.txt
+                      retention-days: 30
                     continue-on-error: true
 
             """
     }
 
-    /// SPK-based build and test job using hooks
+    /// SPK-based test job using hooks
     static func ciSpkBuildAndTestJob(
         needsQualityChecks: Bool = true,
         includeStaticAnalysis: Bool = false
     ) -> String {
         let needs: String
         if includeStaticAnalysis {
-            needs = "[format-check, unused-check, duplicates-check]"
+            needs = "[format-check, duplicates-check, unused-check]"
         } else {
             needs = needsQualityChecks ? "format-check" : ""
         }
@@ -495,21 +533,22 @@ extension DefaultConfigs {
                 if: |
                   always() &&
                   needs.format-check.result == 'success' &&
-                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped') &&
-                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped')
+                  (needs.duplicates-check.result == 'success' || needs.duplicates-check.result == 'skipped') &&
+                  (needs.unused-check.result == 'success' || needs.unused-check.result == 'skipped')
             """ : ""
 
         let stageLabel = includeStaticAnalysis ? "Stage 3" : "Stage 2"
 
         return """
               # ==========================================================================
-              # \(stageLabel): Build & Test
+              # \(stageLabel): Test with Coverage
               # ==========================================================================
-              build-and-test:
-                name: Build & Test
+              test:
+                name: Test
                 runs-on: macos-15\(needsClause)\(ifClause)
                 steps:
-                  - uses: actions/checkout@v4
+                  - name: Checkout
+                    uses: actions/checkout@v4
 
                   - name: Select Xcode
                     run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
@@ -532,7 +571,7 @@ extension DefaultConfigs {
 
     // swa:ignore-complexity
     static func ciCodeQLJob(needsTest: Bool = true) -> String {
-        let needsValue = needsTest ? "build-and-test" : "format-check"
+        let needsValue = needsTest ? "test" : "format-check"
         let stageLabel = needsTest ? "Stage 4" : "Stage 3"
 
         return """
@@ -671,6 +710,80 @@ extension DefaultConfigs {
     }
 }
 
+// MARK: - Documentation Jobs
+
+extension DefaultConfigs {
+    /// Job that builds documentation using DocC
+    /// - Parameters:
+    ///   - targetName: The target to generate documentation for
+    ///   - hostingBasePath: The base path for static hosting (usually the repo name)
+    static func ciDocsJob(targetName: String, hostingBasePath: String) -> String {
+        """
+          # ==========================================================================
+          # Stage 4: Build Documentation
+          # ==========================================================================
+          docs:
+            name: Build Documentation
+            runs-on: macos-15
+            needs: test
+            if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+            steps:
+              - name: Checkout
+                uses: actions/checkout@v4
+
+              - name: Select Xcode
+                run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+
+              - name: Restore SPM Cache
+                uses: actions/cache@v4
+                with:
+                  path: |
+                    .build
+                    ~/Library/Developer/Xcode/DerivedData
+                  key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+                  restore-keys: spm-${{ runner.os }}-
+
+              - name: Build Documentation
+                run: |
+                  swift package --allow-writing-to-directory ./docs \\
+                    generate-documentation \\
+                    --target \(targetName) \\
+                    --disable-indexing \\
+                    --transform-for-static-hosting \\
+                    --hosting-base-path \(hostingBasePath) \\
+                    --output-path ./docs
+
+              - name: Upload Pages Artifact
+                uses: actions/upload-pages-artifact@v3
+                with:
+                  path: ./docs
+
+        """
+    }
+
+    /// Job that deploys documentation to GitHub Pages
+    static func ciDeployDocsJob() -> String {
+        """
+          # ==========================================================================
+          # Deploy Documentation
+          # ==========================================================================
+          deploy-docs:
+            name: Deploy Documentation
+            runs-on: ubuntu-latest
+            needs: docs
+            if: github.ref == 'refs/heads/main'
+            environment:
+              name: github-pages
+              url: ${{ steps.deployment.outputs.page_url }}
+            steps:
+              - name: Deploy to GitHub Pages
+                id: deployment
+                uses: actions/deploy-pages@v4
+
+        """
+    }
+}
+
 // MARK: - Release Jobs
 
 extension DefaultConfigs {
@@ -683,7 +796,7 @@ extension DefaultConfigs {
           prepare-release:
             name: Prepare Release
             runs-on: macos-15
-            needs: build-and-test
+            needs: test
             if: >-
               startsWith(github.ref, 'refs/tags/v') ||
               (github.event_name == 'workflow_dispatch' && inputs.release) ||

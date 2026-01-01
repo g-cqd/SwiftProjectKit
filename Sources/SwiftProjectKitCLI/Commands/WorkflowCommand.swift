@@ -47,6 +47,18 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Exclude release jobs from CI workflow")
     var noRelease = false
 
+    @Flag(name: .long, help: "Include static analysis (unused code, duplicates)")
+    var staticAnalysis = false
+
+    @Flag(name: .long, help: "Include documentation generation and deployment")
+    var docs = false
+
+    @Option(name: .long, help: "Target for documentation generation (required with --docs)")
+    var docsTarget: String?
+
+    @Option(name: .long, help: "Hosting base path for docs (defaults to project name)")
+    var hostingBasePath: String?
+
     @Flag(name: .long, help: "Overwrite existing workflows")
     var force = false
 
@@ -75,12 +87,22 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
         // Create workflows directory
         try FileManager.default.createDirectory(at: workflowsDir, withIntermediateDirectories: true)
 
+        // Validate docs options
+        if docs, docsTarget == nil {
+            print("Error: --docs-target is required when using --docs")
+            return
+        }
+
         // Generate unified CI/CD workflow
         try generateCI(
             at: workflowsDir,
             name: projectName,
             platforms: platforms,
             includeRelease: !noRelease,
+            includeStaticAnalysis: staticAnalysis,
+            includeDocs: docs,
+            docsTarget: docsTarget,
+            hostingBasePath: hostingBasePath,
         )
 
         print("\nWorkflow generation complete!")
@@ -93,6 +115,10 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
         name: String,
         platforms: PlatformConfiguration,
         includeRelease: Bool,
+        includeStaticAnalysis: Bool,
+        includeDocs: Bool,
+        docsTarget: String?,
+        hostingBasePath: String?,
     ) throws {
         let path = dir.appendingPathComponent("ci.yml")
 
@@ -105,13 +131,22 @@ struct GenerateWorkflowCommand: AsyncParsableCommand {
             name: name,
             platforms: platforms,
             includeRelease: includeRelease,
+            includeStaticAnalysis: includeStaticAnalysis,
+            includeDocs: includeDocs,
+            docsTarget: docsTarget,
+            hostingBasePath: hostingBasePath,
         )
         try workflow.write(to: path, atomically: true, encoding: .utf8)
 
-        if includeRelease {
-            print("  Created ci.yml (unified CI/CD with release support)")
+        var features: [String] = []
+        if includeRelease { features.append("release") }
+        if includeStaticAnalysis { features.append("static analysis") }
+        if includeDocs { features.append("docs") }
+
+        if features.isEmpty {
+            print("  Created ci.yml (CI only)")
         } else {
-            print("  Created ci.yml (CI only, no release jobs)")
+            print("  Created ci.yml (CI with \(features.joined(separator: ", ")))")
         }
     }
 }

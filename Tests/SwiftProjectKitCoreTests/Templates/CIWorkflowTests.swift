@@ -11,6 +11,9 @@
 // - Test binary release features (universal binary, packaging, checksums)
 // - Validate Homebrew formula generation
 // - Ensure custom binary names work correctly
+// - Test static analysis (SWA) integration
+// - Test documentation generation and deployment
+// - Verify coverage report generation (lcov + text)
 //
 // ## Release Flow
 // The release workflow uses a VERSION file as single source of truth:
@@ -155,8 +158,8 @@ struct CIWorkflowTests {
         #expect(jobs["format-check"] != nil, "Should have format-check job")
     }
 
-    @Test("Has build-and-test job")
-    func hasBuildAndTestJob() throws {
+    @Test("Has test job")
+    func hasTestJob() throws {
         let yaml = try parseWorkflow(name: "TestPackage", platforms: .macOSOnly)
 
         guard let jobs = yaml["jobs"] as? [String: Any] else {
@@ -164,7 +167,7 @@ struct CIWorkflowTests {
             return
         }
 
-        #expect(jobs["build-and-test"] != nil, "Should have build-and-test job")
+        #expect(jobs["test"] != nil, "Should have test job")
     }
 
     // MARK: - Format Check Job Steps
@@ -173,7 +176,7 @@ struct CIWorkflowTests {
     func formatCheckJobRunsSwiftFormat() throws {
         let workflow = DefaultConfigs.ciWorkflow(name: "TestPackage", platforms: .macOSOnly)
 
-        #expect(workflow.contains("swift-format lint"), "Format check job should run swift-format")
+        #expect(workflow.contains("swift format lint"), "Format check job should run swift format")
     }
 
     // MARK: - Build Job
@@ -603,10 +606,392 @@ struct CIWorkflowTests {
         }
 
         #expect(jobs["format-check"] != nil, "Should have format-check job")
-        #expect(jobs["build-and-test"] != nil, "Should have build-and-test job")
+        #expect(jobs["test"] != nil, "Should have test job")
         #expect(jobs["codeql"] != nil, "Should have codeql job")
         #expect(jobs["prepare-release"] != nil, "Should have prepare-release job")
         #expect(jobs["release"] != nil, "Should have release job")
+    }
+
+    // MARK: - Static Analysis
+
+    @Test("Static analysis workflow is valid YAML")
+    func staticAnalysisWorkflowIsValidYAML() throws {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+        let parsed = try Yams.load(yaml: workflow)
+
+        #expect(parsed != nil, "Static analysis workflow should be valid YAML")
+    }
+
+    @Test("Static analysis includes SWA setup job")
+    func staticAnalysisIncludesSetupSWA() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["setup-swa"] != nil, "Should have setup-swa job")
+    }
+
+    @Test("Static analysis includes unused code check")
+    func staticAnalysisIncludesUnusedCheck() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["unused-check"] != nil, "Should have unused-check job")
+    }
+
+    @Test("Static analysis includes duplicates check")
+    func staticAnalysisIncludesDuplicatesCheck() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["duplicates-check"] != nil, "Should have duplicates-check job")
+    }
+
+    @Test("Static analysis uses artifact sharing for SWA binary")
+    func staticAnalysisUsesArtifacts() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+
+        #expect(workflow.contains("upload-artifact@v4"), "Should upload SWA binary as artifact")
+        #expect(workflow.contains("download-artifact@v4"), "Should download SWA binary artifact")
+        #expect(workflow.contains("swa-binary"), "Should use swa-binary artifact name")
+    }
+
+    @Test("Static analysis has SWA_VERSION environment variable")
+    func staticAnalysisHasSWAVersion() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: true,
+        )
+
+        guard let env = yaml["env"] as? [String: Any] else {
+            Issue.record("env section not found")
+            return
+        }
+
+        #expect(env["SWA_VERSION"] != nil, "Should have SWA_VERSION env var")
+    }
+
+    @Test("Non-static-analysis workflow excludes SWA jobs")
+    func nonStaticAnalysisExcludesSWAJobs() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeStaticAnalysis: false,
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["setup-swa"] == nil, "Should not have setup-swa job")
+        #expect(jobs["unused-check"] == nil, "Should not have unused-check job")
+        #expect(jobs["duplicates-check"] == nil, "Should not have duplicates-check job")
+    }
+
+    // MARK: - Documentation
+
+    @Test("Docs workflow is valid YAML")
+    func docsWorkflowIsValidYAML() throws {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+        let parsed = try Yams.load(yaml: workflow)
+
+        #expect(parsed != nil, "Docs workflow should be valid YAML")
+    }
+
+    @Test("Docs workflow includes docs job")
+    func docsWorkflowIncludesDocsJob() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["docs"] != nil, "Should have docs job")
+    }
+
+    @Test("Docs workflow includes deploy-docs job")
+    func docsWorkflowIncludesDeployDocsJob() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["deploy-docs"] != nil, "Should have deploy-docs job")
+    }
+
+    @Test("Docs workflow uses Swift-DocC")
+    func docsWorkflowUsesSwiftDocC() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        #expect(workflow.contains("generate-documentation"), "Should use generate-documentation")
+        #expect(workflow.contains("--target TestPackageCore"), "Should specify target")
+        #expect(workflow.contains("--transform-for-static-hosting"), "Should transform for static hosting")
+    }
+
+    @Test("Docs workflow uses custom hosting base path")
+    func docsWorkflowUsesCustomHostingBasePath() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+            hostingBasePath: "MyCustomPath",
+        )
+
+        #expect(
+            workflow.contains("--hosting-base-path MyCustomPath"),
+            "Should use custom hosting base path",
+        )
+    }
+
+    @Test("Docs workflow defaults hosting base path to project name")
+    func docsWorkflowDefaultsHostingBasePath() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        #expect(
+            workflow.contains("--hosting-base-path TestPackage"),
+            "Should default hosting base path to project name",
+        )
+    }
+
+    @Test("Docs workflow uploads pages artifact")
+    func docsWorkflowUploadsPages() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        #expect(workflow.contains("upload-pages-artifact@v3"), "Should upload pages artifact")
+        #expect(workflow.contains("deploy-pages@v4"), "Should deploy pages")
+    }
+
+    @Test("Docs workflow has pages permissions")
+    func docsWorkflowHasPagesPermissions() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        guard let permissions = yaml["permissions"] as? [String: Any] else {
+            Issue.record("Permissions section not found")
+            return
+        }
+
+        #expect(permissions["pages"] as? String == "write", "Should have pages: write permission")
+        #expect(permissions["id-token"] as? String == "write", "Should have id-token: write permission")
+    }
+
+    @Test("Non-docs workflow excludes docs jobs")
+    func nonDocsWorkflowExcludesDocsJobs() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: false,
+        )
+
+        guard let jobs = yaml["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        #expect(jobs["docs"] == nil, "Should not have docs job")
+        #expect(jobs["deploy-docs"] == nil, "Should not have deploy-docs job")
+    }
+
+    @Test("Non-docs workflow excludes pages permissions")
+    func nonDocsWorkflowExcludesPagesPermissions() throws {
+        let yaml = try parseWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeDocs: false,
+        )
+
+        guard let permissions = yaml["permissions"] as? [String: Any] else {
+            Issue.record("Permissions section not found")
+            return
+        }
+
+        #expect(permissions["pages"] == nil, "Should not have pages permission")
+        #expect(permissions["id-token"] == nil, "Should not have id-token permission")
+    }
+
+    // MARK: - Coverage Report
+
+    @Test("Test job generates lcov coverage")
+    func testJobGeneratesLcovCoverage() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(workflow.contains("llvm-cov export"), "Should use llvm-cov export for lcov")
+        #expect(workflow.contains("-format=lcov"), "Should generate lcov format")
+        #expect(workflow.contains("coverage.lcov"), "Should create coverage.lcov file")
+    }
+
+    @Test("Test job generates text coverage report")
+    func testJobGeneratesTextCoverage() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(workflow.contains("llvm-cov report"), "Should use llvm-cov report for text")
+        #expect(workflow.contains("coverage.txt"), "Should create coverage.txt file")
+    }
+
+    @Test("Test job uploads coverage artifact")
+    func testJobUploadsCoverageArtifact() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(workflow.contains("coverage-report"), "Should upload coverage-report artifact")
+        #expect(workflow.contains("retention-days: 30"), "Should retain coverage for 30 days")
+    }
+
+    @Test("Coverage excludes test and build directories")
+    func coverageExcludesTestAndBuildDirs() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(
+            workflow.contains("-ignore-filename-regex='.build|Tests|Fixtures'"),
+            "Should ignore build, tests, and fixtures directories",
+        )
+    }
+
+    // MARK: - Format Check
+
+    @Test("Format check reads paths from .spk.json")
+    func formatCheckReadsPathsFromSpkJson() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(workflow.contains(".spk.json"), "Should reference .spk.json")
+        #expect(
+            workflow.contains("hooks.tasks.format.paths"),
+            "Should read format paths from hooks config",
+        )
+    }
+
+    @Test("Format check has fallback paths")
+    func formatCheckHasFallbackPaths() {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+        )
+
+        #expect(
+            workflow.contains("Sources/ Tests/ Plugins/"),
+            "Should have fallback paths when .spk.json is missing",
+        )
+    }
+
+    // MARK: - Full Workflow with All Features
+
+    @Test("Full workflow with all features is valid")
+    func fullWorkflowWithAllFeaturesIsValid() throws {
+        let workflow = DefaultConfigs.ciWorkflow(
+            name: "TestPackage",
+            platforms: .macOSOnly,
+            includeRelease: true,
+            includeBinaryRelease: true,
+            binaryName: "testpkg",
+            includeStaticAnalysis: true,
+            includeDocs: true,
+            docsTarget: "TestPackageCore",
+        )
+
+        let parsed = try Yams.load(yaml: workflow) as? [String: Any]
+        #expect(parsed != nil, "Full workflow should be valid YAML")
+
+        guard let jobs = parsed?["jobs"] as? [String: Any] else {
+            Issue.record("Jobs section not found")
+            return
+        }
+
+        // All jobs should be present
+        #expect(jobs["setup-swa"] != nil, "Should have setup-swa job")
+        #expect(jobs["format-check"] != nil, "Should have format-check job")
+        #expect(jobs["unused-check"] != nil, "Should have unused-check job")
+        #expect(jobs["duplicates-check"] != nil, "Should have duplicates-check job")
+        #expect(jobs["test"] != nil, "Should have test job")
+        #expect(jobs["codeql"] != nil, "Should have codeql job")
+        #expect(jobs["prepare-release"] != nil, "Should have prepare-release job")
+        #expect(jobs["release"] != nil, "Should have release job")
+        #expect(jobs["docs"] != nil, "Should have docs job")
+        #expect(jobs["deploy-docs"] != nil, "Should have deploy-docs job")
     }
 
     // MARK: Private
@@ -620,6 +1005,10 @@ struct CIWorkflowTests {
         includePlatformMatrix: Bool = false,
         includeBinaryRelease: Bool = false,
         binaryName: String? = nil,
+        includeStaticAnalysis: Bool = false,
+        includeDocs: Bool = false,
+        docsTarget: String? = nil,
+        hostingBasePath: String? = nil,
     ) throws -> [String: Any] {
         let workflow = DefaultConfigs.ciWorkflow(
             name: name,
@@ -628,6 +1017,10 @@ struct CIWorkflowTests {
             includePlatformMatrix: includePlatformMatrix,
             includeBinaryRelease: includeBinaryRelease,
             binaryName: binaryName,
+            includeStaticAnalysis: includeStaticAnalysis,
+            includeDocs: includeDocs,
+            docsTarget: docsTarget,
+            hostingBasePath: hostingBasePath,
         )
 
         guard let parsed = try Yams.load(yaml: workflow) as? [String: Any] else {
