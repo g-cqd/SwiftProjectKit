@@ -285,7 +285,7 @@ public struct WorkflowConfiguration: Codable, Sendable, Equatable {
 // MARK: - ProjectConfiguration
 
 /// Main project configuration model
-/// Loaded from `.swiftprojectkit.json` in project root
+/// Loaded from `.spk.json` in project root
 public struct ProjectConfiguration: Codable, Sendable, Equatable {
     // MARK: Lifecycle
 

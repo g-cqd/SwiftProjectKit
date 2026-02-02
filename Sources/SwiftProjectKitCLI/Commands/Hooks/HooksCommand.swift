@@ -305,10 +305,36 @@ struct RunCommand: AsyncParsableCommand {
         tasks.append(BuiltInTasks.format(paths: formatPaths))
 
         // Build task
-        tasks.append(BuiltInTasks.build())
+        let buildConfig = config.tasks["build"]
+        let buildScheme = buildConfig?.options?["scheme"]?.value as? String
+        let buildProject = buildConfig?.options?["project"]?.value as? String
+        let buildDestination = buildConfig?.options?["destination"]?.value as? String
+        let buildConfiguration = (buildConfig?.options?["configuration"]?.value as? String) ?? "debug"
+        tasks.append(
+            BuiltInTasks.build(
+                configuration: buildConfiguration,
+                scheme: buildScheme,
+                project: buildProject,
+                destination: buildDestination
+            )
+        )
 
         // Test task
-        tasks.append(BuiltInTasks.test())
+        let testConfig = config.tasks["test"]
+        let testScheme = testConfig?.options?["scheme"]?.value as? String
+        let testProject = testConfig?.options?["project"]?.value as? String
+        let testDestination = testConfig?.options?["destination"]?.value as? String
+        let testParallel = (testConfig?.options?["parallel"]?.value as? Bool) ?? true
+        let testFilter = testConfig?.options?["filter"]?.value as? String
+        tasks.append(
+            BuiltInTasks.test(
+                parallel: testParallel,
+                filter: testFilter,
+                scheme: testScheme,
+                project: testProject,
+                destination: testDestination
+            )
+        )
 
         // Version sync task
         let versionSyncConfig = config.tasks["versionSync"]

@@ -145,14 +145,42 @@ spk hooks list
 
 ### Built-in Tasks
 
-| Task | Hooks | Description | Auto-fix |
-|------|-------|-------------|----------|
-| `format` | pre-commit | Run swift-format | Yes (safe) |
-| `build` | pre-commit | Build the project | No |
-| `test` | pre-commit, pre-push | Run tests | No |
-| `versionSync` | pre-commit, ci | Check version consistency | Yes (safe) |
-| `unused` | pre-push, ci | Detect unused code | No |
-| `duplicates` | pre-push, ci | Detect code duplication | No |
+| Task | Hooks | Description | Auto-fix | Options |
+|------|-------|-------------|----------|---------|
+| `format` | pre-commit | Run swift-format | Yes (safe) | `paths` |
+| `build` | pre-commit | Build the project | No | `scheme`, `project`, `destination`, `configuration` |
+| `test` | pre-commit, pre-push | Run tests | No | `scheme`, `project`, `destination`, `parallel`, `filter` |
+| `versionSync` | pre-commit, ci | Check version consistency | Yes (safe) | `syncTargets` |
+| `unused` | pre-push, ci | Detect unused code | No | `paths` |
+| `duplicates` | pre-push, ci | Detect code duplication | No | `paths`, `minTokens` |
+
+### Xcode Project Support
+
+When `scheme` or `project` are set in task options, spk uses `xcodebuild` instead of `swift build`/`swift test`. This enables hooks for Xcode projects that aren't Swift packages.
+
+```json
+{
+  "hooks": {
+    "tasks": {
+      "build": {
+        "enabled": true,
+        "options": {
+          "scheme": "MyApp",
+          "project": "MyApp.xcodeproj"
+        }
+      },
+      "test": {
+        "enabled": true,
+        "options": {
+          "scheme": "MyApp",
+          "project": "MyApp.xcodeproj",
+          "destination": "platform=iOS Simulator,name=iPhone 16"
+        }
+      }
+    }
+  }
+}
+```
 
 ---
 

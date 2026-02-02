@@ -23,29 +23,53 @@ public struct BuildTask: HookTask {
     public let filePatterns = ["**/*.swift", "Package.swift"]
 
     private let configuration: String
+    private let scheme: String?
+    private let project: String?
+    private let destination: String?
 
-    public init(configuration: String = "debug") {
+    public init(
+        configuration: String = "debug",
+        scheme: String? = nil,
+        project: String? = nil,
+        destination: String? = nil
+    ) {
         self.configuration = configuration
+        self.scheme = scheme
+        self.project = project
+        self.destination = destination
     }
 
     public func run(context: HookContext) async throws -> TaskResult {
         let startTime = ContinuousClock.now
 
-        let args = ["build", "-c", configuration]
+        let command: String
+        let args: [String]
+
+        if let scheme {
+            command = "xcodebuild"
+            var xcodebuildArgs: [String] = []
+            if let project { xcodebuildArgs += ["-project", project] }
+            xcodebuildArgs += ["-scheme", scheme, "build", "-configuration", configuration]
+            if let destination { xcodebuildArgs += ["-destination", destination] }
+            args = xcodebuildArgs
+        } else {
+            command = "swift"
+            args = ["build", "-c", configuration]
+        }
 
         let output: String
         let exitCode: Int32
 
         if context.verbose {
             (output, exitCode) = try await Shell.runStreamingWithOutput(
-                "swift",
+                command,
                 arguments: args,
                 in: context.projectRoot,
                 onOutput: verboseOutputHandler
             )
         } else {
             (output, exitCode) = try await Shell.runWithExitCode(
-                "swift",
+                command,
                 arguments: args,
                 in: context.projectRoot
             )
@@ -140,21 +164,47 @@ public struct TestTask: HookTask {
 
     private let parallel: Bool
     private let filter: String?
+    private let scheme: String?
+    private let project: String?
+    private let destination: String?
 
-    public init(parallel: Bool = true, filter: String? = nil) {
+    public init(
+        parallel: Bool = true,
+        filter: String? = nil,
+        scheme: String? = nil,
+        project: String? = nil,
+        destination: String? = nil
+    ) {
         self.parallel = parallel
         self.filter = filter
+        self.scheme = scheme
+        self.project = project
+        self.destination = destination
     }
 
     public func run(context: HookContext) async throws -> TaskResult {
         let startTime = ContinuousClock.now
 
-        var args = ["test"]
-        if parallel {
-            args.append("--parallel")
-        }
-        if let filter {
-            args += ["--filter", filter]
+        let command: String
+        var args: [String]
+
+        if let scheme {
+            command = "xcodebuild"
+            args = []
+            if let project { args += ["-project", project] }
+            args += ["-scheme", scheme, "test"]
+            if let destination { args += ["-destination", destination] }
+            if parallel { args += ["-parallel-testing-enabled", "YES"] }
+            if let filter { args += ["-only-testing", filter] }
+        } else {
+            command = "swift"
+            args = ["test"]
+            if parallel {
+                args.append("--parallel")
+            }
+            if let filter {
+                args += ["--filter", filter]
+            }
         }
 
         let output: String
@@ -162,14 +212,14 @@ public struct TestTask: HookTask {
 
         if context.verbose {
             (output, exitCode) = try await Shell.runStreamingWithOutput(
-                "swift",
+                command,
                 arguments: args,
                 in: context.projectRoot,
                 onOutput: verboseOutputHandler
             )
         } else {
             (output, exitCode) = try await Shell.runWithExitCode(
-                "swift",
+                command,
                 arguments: args,
                 in: context.projectRoot
             )

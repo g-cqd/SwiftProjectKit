@@ -237,13 +237,24 @@ public enum BuiltInTasks {
     }
 
     /// Build task
-    public static func build(configuration: String = "debug") -> BuildTask {
-        BuildTask(configuration: configuration)
+    public static func build(
+        configuration: String = "debug",
+        scheme: String? = nil,
+        project: String? = nil,
+        destination: String? = nil
+    ) -> BuildTask {
+        BuildTask(configuration: configuration, scheme: scheme, project: project, destination: destination)
     }
 
     /// Test task
-    public static func test(parallel: Bool = true, filter: String? = nil) -> TestTask {
-        TestTask(parallel: parallel, filter: filter)
+    public static func test(
+        parallel: Bool = true,
+        filter: String? = nil,
+        scheme: String? = nil,
+        project: String? = nil,
+        destination: String? = nil
+    ) -> TestTask {
+        TestTask(parallel: parallel, filter: filter, scheme: scheme, project: project, destination: destination)
     }
 
     /// Version sync task
